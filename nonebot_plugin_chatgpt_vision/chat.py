@@ -24,21 +24,6 @@ for i in range(len(config.openai_pool_model_config)):
 POOL = OpenAI_Pool(config=list_for_config)
 
 
-def get_comsumption(usage: dict, model: str) -> float:
-    pt = usage["prompt_tokens"]
-    ct = usage["completion_tokens"]
-
-    if model.startswith("gpt-3.5"):
-        return (0.5 * pt + 1.5 * ct) / 1_000_000
-    if model.startswith("gpt-4o"):
-        return (5 * pt + 15 * ct) / 1_000_000
-    if model.startswith("gpt-4-"):
-        return (30 * pt + 60 * ct) / 1_000_000
-
-    return (10 * pt + 30 * ct) / 1_000_000
-    # 乱算的，能用就行了
-
-
 async def chat(message: list, model: str, times: int = 3) -> dict:
     for _ in range(times - 1):
         cilent = POOL(model=model)
