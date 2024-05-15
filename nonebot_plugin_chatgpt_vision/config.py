@@ -17,12 +17,6 @@ class Config(BaseModel):
     max_history_tokens: int = 3000
     """ 历史记录最大 tokens（只包括 User） """
 
-    oepnai_pool_config: list = []
-    """ 格式是 [
-        [model, key, baseurl],
-        ...
-    ]，例如：[
-        ["gpt-4o", "sk-***", "https://api.openai/v1"],
-        ["gpt-4o", "sk-***", "ditto"],
-        ...
-    ]，其中，ditto 会被处理成与上个的 baseurl 相同 """
+    openai_pool_model_config: list[str] = []
+    openai_pool_key_config: list[str] = []
+    openai_pool_baseurl_config: list[str] = []

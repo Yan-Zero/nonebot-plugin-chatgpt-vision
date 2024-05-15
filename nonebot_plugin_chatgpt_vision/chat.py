@@ -11,8 +11,10 @@ from .config import Config
 config: Config = get_plugin_config(Config)
 
 list_for_config: list[OpenAI_Config] = []
-for i in config.oepnai_pool_config:
-    model, key, url, _ = i
+for i in range(len(config.openai_pool_model_config)):
+    model = config.openai_pool_model_config[i]
+    key = config.openai_pool_key_config[i]
+    url = config.openai_pool_baseurl_config[i]
     if url == "ditto":
         url = list_for_config[-1].baseurl
     if model == "ditto":

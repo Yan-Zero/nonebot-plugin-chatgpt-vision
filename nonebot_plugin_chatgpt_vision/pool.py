@@ -33,6 +33,7 @@ class OpenAI_Pool:
             self.__cilents[i.model].append(
                 AsyncOpenAI(base_url=i.baseurl, api_key=i.apikey)
             )
+        self.__request_limit = {}
 
     def add_config(self, config: OpenAI_Config) -> None:
         self.__cilents.append(
