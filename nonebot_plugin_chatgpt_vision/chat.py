@@ -24,15 +24,13 @@ for i in range(len(config.openai_pool_model_config)):
 POOL = OpenAI_Pool(config=list_for_config)
 
 
-async def chat(message: list, model: str, times: int = 3) -> dict:
+async def chat(message: list, model: str, times: int = 3):
     for _ in range(times - 1):
         cilent = POOL(model=model)
         try:
-            return (
-                await cilent.chat.completions.create(messages=message, model=model)
-            ).dict()
+            return await cilent.chat.completions.create(messages=message, model=model)
         except RateLimitError:
             POOL.RequestLimit(model=model, cilent=cilent, timeout=120)
-    return (
-        await POOL(model=model).chat.completions.create(messages=message, model=model)
-    ).dict()
+    return await POOL(model=model).chat.completions.create(
+        messages=message, model=model
+    )

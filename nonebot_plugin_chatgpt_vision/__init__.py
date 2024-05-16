@@ -18,6 +18,7 @@ from nonebot.permission import SUPERUSER
 from .config import Config
 from .chat import chat
 from .userrd import UserRD
+from .human_like import humanlike
 
 
 __plugin_meta__ = PluginMetadata(
@@ -111,10 +112,10 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 "content": _chat,
             },
         )
-        message = await chat(message=record.chatlog, model=record.model)
-        if record.append(message):
+        rsp = await chat(message=record.chatlog, model=record.model)
+        if record.append(rsp):
             await m_chat.send(f"你的模型变成 {p_config.fallback_model} 了。")
-        message = message["choices"][0]["message"]["content"]
+        message = rsp.choices[0].message.content
         if isinstance(args, V11M):
             message = [
                 {

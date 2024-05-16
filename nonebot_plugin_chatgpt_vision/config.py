@@ -20,3 +20,11 @@ class Config(BaseModel):
     openai_pool_model_config: list[str] = []
     openai_pool_key_config: list[str] = []
     openai_pool_baseurl_config: list[str] = []
+
+    openai_embedding_apikey: str = ""
+    openai_embedding_baseurl: str = ""
+
+    human_like_chat: bool = False
+    human_like_max_tokens: int = 6000
+    human_like_max_log: int = 30
+    human_like_group: list[int] = []
