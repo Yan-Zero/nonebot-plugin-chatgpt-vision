@@ -60,13 +60,23 @@ async def _(bot: Bot, event: Event):
 
 
 @my_model.handle()
-async def _(bot: Bot, event: Event):
+async def _(bot: Bot, event: Event, args=CommandArg()):
     uid = hashlib.sha1((bot.adapter.get_name() + event.get_user_id()).encode()).digest()
     if uid not in user_record:
         user_record[uid] = UserRD()
     record = user_record[uid]
 
-    await my_model.finish(f"你的模型是{record.model}")
+    args = args.extract_plain_text().strip()
+    if not args:
+        await my_model.finish(f"你的模型是{record.model}")
+
+    if await SUPERUSER(bot, event):
+        if args == "gpt-4":
+            args = "gpt-4-vision-preview"
+        record.model = args
+        await my_model.finish(f"你的模型现在是{args}")
+    else:
+        await my_model.finish("你没有权限修改模型。")
 
 
 @m_chat.handle()
@@ -113,7 +123,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             },
         )
         rsp = await chat(message=record.chatlog, model=record.model)
-        if record.append(rsp):
+        if record.append(rsp.model_dump()):
             await m_chat.send(f"你的模型变成 {p_config.fallback_model} 了。")
         message = rsp.choices[0].message.content
         if isinstance(args, V11M):

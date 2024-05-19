@@ -42,6 +42,7 @@ class UserRD:
         if datetime.now() - self.time > timedelta(days=1):
             self.time = datetime.now()
             self.consumption = 0
+            self.model = p_config.openai_default_model
             return False
         return True
 
@@ -63,6 +64,6 @@ class UserRD:
 
         if pt > p_config.max_history_tokens or self.count >= p_config.max_chatlog_count:
             self.chatlog.pop(0)
-            self.model = p_config.fallback_model
-            return True
+            # self.model = p_config.fallback_model
+            # return True
         return False
