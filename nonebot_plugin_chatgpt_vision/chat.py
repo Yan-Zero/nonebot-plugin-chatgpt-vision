@@ -19,6 +19,8 @@ for i in range(len(config.openai_pool_model_config)):
         url = list_for_config[-1].baseurl
     if model == "ditto":
         model = list_for_config[-1].model
+    if key == "ditto":
+        key = list_for_config[-1].apikey
     list_for_config.append(OpenAI_Config(baseurl=url, apikey=key, model=model))
 
 POOL = OpenAI_Pool(config=list_for_config)

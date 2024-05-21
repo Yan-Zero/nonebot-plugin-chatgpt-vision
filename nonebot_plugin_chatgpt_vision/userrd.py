@@ -17,6 +17,8 @@ def get_comsumption(usage: dict, model: str) -> float:
         return (5 * pt + 15 * ct) / 1_000_000
     if model.startswith("gpt-4-"):
         return (30 * pt + 60 * ct) / 1_000_000
+    if model.startswith("glm-4-"):
+        return (13.9 * pt + 13.9 * ct) / 1_000_000
 
     return (10 * pt + 30 * ct) / 1_000_000
     # 乱算的，能用就行了

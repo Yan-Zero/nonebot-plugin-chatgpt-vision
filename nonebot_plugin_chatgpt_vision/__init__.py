@@ -71,8 +71,8 @@ async def _(bot: Bot, event: Event, args=CommandArg()):
         await my_model.finish(f"你的模型是{record.model}")
 
     if await SUPERUSER(bot, event):
-        if args == "gpt-4":
-            args = "gpt-4-vision-preview"
+        if args == "gpt4":
+            args = "gpt-4-turbo"
         record.model = args
         await my_model.finish(f"你的模型现在是{args}")
     else:
@@ -135,7 +135,17 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                         "name": "GPT",
                         "content": V11Seg.text(message),
                     },
-                }
+                },
+                {
+                    "type": "node",
+                    "data": {
+                        "uin": str(event.get_user_id()),
+                        "name": "GPT",
+                        "content": V11Seg.text(
+                            f"你现在上下文有{len(record.chatlog)}条。 "
+                        ),
+                    },
+                },
             ]
             if isinstance(event, V11GME):
                 await bot.call_api(
