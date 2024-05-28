@@ -2,7 +2,7 @@ import hashlib
 import re
 import base64
 import aiohttp
-import pandoc
+import pypandoc
 from PIL import Image
 from io import BytesIO
 from tex2img import AsyncLatex2PNG
@@ -253,11 +253,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                     },
                 }
                 for i in [
-                    await get_png(
-                        pandoc.write(
-                            pandoc.read(message, format="markdown"), format="latex"
-                        )
-                    ),
+                    await get_png(pypandoc.convert_text(message, "latex", format="md")),
                     V11Seg.text(f"你现在上下文有{len(record.chatlog)}条。"),
                     V11Seg.text(f"总共花费{record.consumption}$"),
                 ]
