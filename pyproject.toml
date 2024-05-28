@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nonebot-plugin-chatgpt-vision"
-version = "0.0.7"
+version = "0.0.8"
 description = ""
 authors = ["Yan <1964649083@qq.com>"]
 license = "Apache License 2.0"
@@ -14,6 +14,7 @@ PyYAML = "^6.0.1"
 openai = "^1.30.1"
 dashscope = "^1.19.0"
 tex2img = {git = "https://github.com/Yan-Zero/tex2img.git", rev = "main"}
+pandoc = "^2.3"
 
 
 [build-system]

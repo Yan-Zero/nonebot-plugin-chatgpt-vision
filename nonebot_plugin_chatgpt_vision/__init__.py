@@ -2,6 +2,7 @@ import hashlib
 import re
 import base64
 import aiohttp
+import pandoc
 from PIL import Image
 from io import BytesIO
 from tex2img import AsyncLatex2PNG
@@ -84,79 +85,9 @@ async def _(bot: Bot, event: Event, args=CommandArg()):
 
 
 async def get_png(tex: str) -> BytesIO:
-    png = Image.open(BytesIO((await render.acompile(tex, compiler="xelatex"))[0]))
-    pixels = png.load()
-    w, h = png.size
-    t, le = 0, 0
-    flag = False
-    for i in range(0, h):
-        for j in range(0, w):
-            if pixels[j, i] != (255, 255, 255):
-                t = max(0, i - 5)
-                flag = True
-                break
-        if flag:
-            break
-
-    flag = False
-    for j in range(0, w):
-        for i in range(t, h):
-            if pixels[j, i] != (255, 255, 255):
-                le = max(0, j - 5)
-                flag = True
-                break
-        if flag:
-            break
-    flag = False
-
-    for i in range(h - 1, t - 1, -1):
-        for j in range(le, w):
-            if pixels[j, i] != (255, 255, 255):
-                h = i + 5
-                flag = True
-                break
-        if flag:
-            break
-
-    flag = False
-    for j in range(w - 1, le - 1, -1):
-        for i in range(t, h):
-            if pixels[j, i] != (255, 255, 255):
-                w = j + 5
-                flag = True
-                break
-        if flag:
-            break
-    byte = BytesIO()
-    png.crop((le, t, w, h)).save(byte, "PNG")
-    return byte
-
-
-async def render_markdown(content: str) -> list[V11Seg]:
-    # get the text between "\[""\]"
-    result = []
-    stack = []
-    for i in range(len(content)):
-        if content[i] != "\\":
-            continue
-
-        if i + 1 < len(content):
-            if content[i + 1] == "[":
-                stack.append(i)
-            elif content[i + 1] == "]" and stack:
-                s = stack.pop()
-                if stack:
-                    continue
-                result.append(content[s : i + 2])
-
-    if stack:
-        result.append(content[stack.pop(0) :])
-
-    async def replace_latex(m):
-        if m[0:2] == "\\[" and m[-2:] == "\\]":
-            return V11Seg.image(
-                await get_png(
-                    """\\documentclass{article}
+    if "\\begin{document}" not in tex:
+        tex = (
+            """\\documentclass{article}
 \\usepackage{xeCJK}
 \\usepackage{tikz}
 \\usepackage{pgfplots}
@@ -210,16 +141,58 @@ async def render_markdown(content: str) -> list[V11Seg]:
 \\pagestyle{empty}
 $$
 """
-                    + m[2:-2]
-                    + """
+            + tex
+            + """
 $$
 \\end{document}
 """
-                )
-            )
-        return V11Seg.text(m)
+        )
+    png = Image.open(BytesIO((await render.acompile(tex, compiler="xelatex"))[0]))
+    pixels = png.load()
+    w, h = png.size
+    t, le = 0, 0
+    flag = False
+    for i in range(0, h):
+        for j in range(0, w):
+            if pixels[j, i] != (255, 255, 255):
+                t = max(0, i - 5)
+                flag = True
+                break
+        if flag:
+            break
 
-    return [await replace_latex(m) for m in result]
+    flag = False
+    for j in range(0, w):
+        for i in range(t, h):
+            if pixels[j, i] != (255, 255, 255):
+                le = max(0, j - 5)
+                flag = True
+                break
+        if flag:
+            break
+    flag = False
+
+    for i in range(h - 1, t - 1, -1):
+        for j in range(le, w):
+            if pixels[j, i] != (255, 255, 255):
+                h = i + 5
+                flag = True
+                break
+        if flag:
+            break
+
+    flag = False
+    for j in range(w - 1, le - 1, -1):
+        for i in range(t, h):
+            if pixels[j, i] != (255, 255, 255):
+                w = j + 5
+                flag = True
+                break
+        if flag:
+            break
+    byte = BytesIO()
+    png.crop((le, t, w, h)).save(byte, "PNG")
+    return byte
 
 
 @m_chat.handle()
@@ -276,13 +249,17 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                     "data": {
                         "uin": str(event.get_user_id()),
                         "name": "GPT",
-                        "content": await render_markdown(i),
+                        "content": i,
                     },
                 }
                 for i in [
-                    message,
-                    f"你现在上下文有{len(record.chatlog)}条。 ",
-                    f"总共花费{record.consumption}$",
+                    await get_png(
+                        pandoc.write(
+                            pandoc.read(message, format="markdown"), format="latex"
+                        )
+                    ),
+                    V11Seg.text(f"你现在上下文有{len(record.chatlog)}条。"),
+                    V11Seg.text(f"总共花费{record.consumption}$"),
                 ]
             ]
             message = [
