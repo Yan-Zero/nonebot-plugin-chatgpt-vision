@@ -22,8 +22,7 @@ from nonebot.permission import SUPERUSER
 from .config import Config
 from .chat import chat
 from .userrd import UserRD
-from .human_like import humanlike
-
+from .dalle import DALLESwitchState
 
 __plugin_meta__ = PluginMetadata(
     name="ChatGPT",
@@ -85,68 +84,25 @@ async def _(bot: Bot, event: Event, args=CommandArg()):
 
 
 async def get_png(tex: str) -> BytesIO:
-    if "\\begin{document}" not in tex:
-        tex = (
-            """\\documentclass{article}
-\\usepackage{xeCJK}
-\\usepackage{tikz}
-\\usepackage{pgfplots}
-\\usepackage{amsmath}
-\\usepackage{amssymb}
-\\usepackage{booktabs}
-\\usepackage{tabularx}
-\\usepackage{multirow}
-\\usepackage{fontspec}
-\\usepackage{geometry}
-\\usepackage{fancyhdr}
-\\usepackage{natbib}
-\\usepackage{biblatex}
-\\usepackage{makeidx}
-\\usepackage{hyperref}
-\\usepackage{graphicx}
-\\usepackage{subcaption}
-\\usepackage{algorithm}
-\\usepackage{algpseudocode}
-\\usepackage{array}
-\\usepackage{enumitem}
-\\usepackage{titlesec}
-\\usepackage{fancyvrb}
-\\usepackage{listings}
-\\usepackage{color}
-\\usepackage{microtype}
-\\usepackage{wrapfig}
-\\usepackage{setspace}
-\\usepackage{titlesec}
-\\usepackage{blindtext}
-\\usepackage{comment}
-\\usepackage{siunitx}
-\\usepackage{caption}
-\\usepackage{parskip}
-\\usepackage{todonotes}
-\\usepackage{tcolorbox}
-\\usepackage{fancybox}
-\\usepackage{mathtools}
-\\usepackage{eurosym}
-\\usepackage{longtable}
-\\usepackage{rotating}
-\\usepackage{float}
-\\usepackage{pdfpages}
-\\usepackage{appendix}
-\\usepackage{csquotes}
-\\usepackage{placeins}
-\\usepackage{etoolbox}
-\\usepackage{adjustbox}
-\\usepackage{lipsum}
-\\begin{document}
-\\pagestyle{empty}
-$$
-"""
-            + tex
-            + """
-$$
-\\end{document}
-"""
-        )
+    tex = tex.replace("\\usepackage{", "\\usepackage{xeCJK}\n\\usepackage{", 1).replace(
+        "\\end{document}", "\\pagestyle{empty}\\end{document}"
+    )
+    #     if "\\begin{document}" not in tex:
+    #         tex = (
+    #             """\\documentclass{article}
+    # \\usepackage{xeCJK}
+    # \\usepackage{tikz}
+    # \\usepackage{pgfplots}
+    # \\usepackage{amsmath}
+    # \\usepackage{amssymb}
+    # \\begin{document}
+    # \\pagestyle{empty}
+    # """
+    #             + tex
+    #             + """
+    # \\end{document}
+    # """
+    #         )
     png = Image.open(BytesIO((await render.acompile(tex, compiler="xelatex"))[0]))
     pixels = png.load()
     w, h = png.size
@@ -215,8 +171,34 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         ]
     ]
     if isinstance(args, V11M):
-        images.extend([seg.data["url"] for seg in args if seg.type == "image"])
+        images.extend(
+            [
+                await send_image_as_base64(seg.data["url"])
+                for seg in args
+                if seg.type == "image"
+            ]
+        )
+        if event.reply:
+            images.extend(
+                [
+                    await send_image_as_base64(seg.data["url"])
+                    for seg in event.reply.message
+                    if seg.type == "image"
+                ]
+            )
     _chat = [{"type": "text", "text": re.sub(r"!\[.*?\]\((.*?)\)", "", _chat)}]
+
+    def to_str(content: list | str):
+        if isinstance(content, str):
+            return content
+        if isinstance(content, dict):
+            if content["type"] == "text":
+                return content["text"]
+            if content["type"] == "image_url":
+                return f"[图片]({content['image_url']['url']})"
+            return str(content)
+        if isinstance(content, list):
+            return "".join([to_str(i) for i in content])
 
     try:
         if images:
@@ -241,8 +223,30 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
         rsp = await chat(message=record.chatlog, model=record.model)
         if record.append(rsp.model_dump()):
             await m_chat.send(f"你的模型变成 {p_config.fallback_model} 了。")
+        print(rsp.choices)
         message = rsp.choices[0].message.content
+        print("B")
         if isinstance(args, V11M):
+            if "$" in message or "\\[" in message or "\\(" in message:
+                try:
+                    message = [
+                        V11Seg.image(
+                            await get_png(
+                                pypandoc.convert_text(
+                                    message,
+                                    "latex",
+                                    format="markdown+tex_math_single_backslash",
+                                    extra_args=("--standalone",),
+                                    # ),
+                                )
+                            )
+                        ),
+                        V11Seg.text(message),
+                    ]
+                except Exception as ex:
+                    message = V11Seg.text(message)
+            else:
+                message = V11Seg.text(message)
             message = [
                 {
                     "type": "node",
@@ -253,7 +257,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                     },
                 }
                 for i in [
-                    await get_png(pypandoc.convert_text(message, "latex", format="md")),
+                    message,
                     V11Seg.text(f"你现在上下文有{len(record.chatlog)}条。"),
                     V11Seg.text(f"总共花费{record.consumption}$"),
                 ]
@@ -264,7 +268,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                     "data": {
                         "uin": str(event.get_user_id()),
                         "name": i["role"],
-                        "content": V11Seg.text(f"{i['role']}:\n{i['content']}"),
+                        "content": V11Seg.text(f"{i['role']}:\n{to_str(i['content'])}"),
                     },
                 }
                 for i in record.chatlog[:-1]
