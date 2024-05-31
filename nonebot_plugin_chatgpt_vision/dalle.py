@@ -18,6 +18,8 @@ from enum import Enum
 import asyncio
 from nonebot.permission import SUPERUSER
 from openai import RateLimitError
+from openai import BadRequestError
+
 import aiohttp
 
 from .chat import POOL
@@ -29,14 +31,10 @@ class Size(Enum):
     LARGE = "1024x1024"
 
 
-size_mapping = {"小": Size.SMALL, "中": Size.MEDIUM, "大": Size.LARGE}
-
 # 全局变量，用于存储DALL·E的开关状态、图片尺寸，以及正在绘图的用户
 drawing_users = {}  # 用于存储正在绘图的用户
 DALLESwitchState = True  # 开关状态,默认关闭
-DALLEImageSize = Size.SMALL  # 图片尺寸，默认为256x256
 
-DALLEImageSize_lock = asyncio.Lock()  # 用于保护DALLEImageSize
 drawing_users_lock = asyncio.Lock()  # 用于绘图用户的锁
 DALLESwitchState_lock = asyncio.Lock()  # 用于保护DALLESwitchState
 
@@ -76,60 +74,18 @@ dell_size = on_command(
 )
 
 
-@dell_size.handle()
-async def _(event: MessageEvent, arg: Message = CommandArg()):
-    global DALLEImageSize  # 在函数内部声明全局变量
-    if isinstance(event, PrivateMessageEvent) and str(event.user_id) not in superusers:
-        await dall_drawing.finish("私聊无法使用此功能")
-    directives = arg.extract_plain_text()
-    if directives in size_mapping:
-        async with DALLEImageSize_lock:
-            DALLEImageSize = size_mapping[directives]
-        await dell_size.finish(f"已设置绘图尺寸为{DALLEImageSize.value}")
-    else:
-        await dell_size.finish("参数错误，可选参数：小、中、大")
-
-
-async def draw_image(prompt: str, times: int = 3):
+async def draw_image(model: str, prompt: str, size=Size.LARGE.value, times: int = 3):
     for _ in range(times - 1):
-        cilent = POOL(model="dall-e-3")
+        cilent = POOL(model=model)
         try:
-            return await cilent.images.generate(
-                model="dall-e-3", prompt=prompt, size=DALLEImageSize.value
-            )
+            return await cilent.images.generate(model=model, prompt=prompt, size=size)
         except RateLimitError:
-            POOL.RequestLimit(model="dall-e-3", cilent=cilent, timeout=120)
-    return await POOL(model="dall-e-3").images.generate(
-        model="dall-e-3", prompt=prompt, size=DALLEImageSize.value
+            POOL.RequestLimit(model=model, cilent=cilent, timeout=120)
+    return await POOL(model=model).images.generate(
+        model=model, prompt=prompt, size=size
     )
 
 
-async def get_img(img_url: str):
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(img_url) as resp:
-                result = await resp.read()
-    except Exception as e:
-        return None
-
-    if not result:
-        return None
-
-    return BytesIO(result)
-
-
-# async def img_img(self, init_images: BytesIO, sizes):
-#     # 根据图像创建图像变体
-#     f = tempfile.mktemp(suffix=".png")
-#     raw_image = Image.open(init_images)
-#     raw_image.save(f, format="PNG")
-#     async with aiofiles.open(f, "rb") as f:
-#         image_data = await f.read()
-#     # 构造请求数据
-#     data = {"n": 2, "size": sizes, "response_format": "b64_json"}
-#     files = {"image": image_data}
-#     url = self.url + "/v1/images/variations"
-#     return await self.create_image(url=url, data=data, files=files)
 dall_drawing = on_command("画", rule=to_me(), aliases={"draw"}, priority=2, block=True)
 
 
@@ -159,6 +115,8 @@ async def do_drawing(
         # 把用户添加到绘图用户列表
         drawing_users[user_id] = True
 
+    success = False
+    error = ""
     try:
         if urls is None and (arg is None or not arg):
             await dall_drawing.finish("请输入要绘制的内容")
@@ -170,28 +128,22 @@ async def do_drawing(
 
         # # 调用DALL·E绘图
         # if urls is not None:
-        #     result, success = await dalle.img_img(
-        #         await get_img(urls[0]), DALLEImageSize.value
-        #     )
+        #     result = await img_img(await get_img(urls[0]))
+        #     result = result.data[0].url
         # else:
         #     # 过滤敏感词
         #     prompt = gfw.filter(arg.extract_plain_text())
         #     result, success = await dalle.get_image(prompt, DALLEImageSize.value)
-        prompt = arg.extract_plain_text()
-        result, success = await draw_image(prompt)
+        result = await draw_image(model="dall-e-3", prompt=arg.extract_plain_text())
+        result = result.data[0].url
+        success = True
+    except BadRequestError as bd:
+        error = str(bd.message)
+    except Exception as ex:
+        error = str(ex)
     finally:
         # 无论成功或失败，都从绘图用户列表中删除
         async with drawing_users_lock:
             del drawing_users[user_id]
-    response_message = V11Seg.image(result) if success else "绘图失败，请重试"
+    response_message = V11Seg.image(result) if success else error
     await dall_drawing.finish(response_message, at_sender=True)
-
-
-dall_img_drawing = on_command(
-    "垫图", rule=to_me(), aliases={"img_draw"}, priority=2, block=True
-)
-
-
-@dall_img_drawing.handle()
-async def _(event: MessageEvent, urls=ImageURLs()):
-    await do_drawing(event, urls=urls)

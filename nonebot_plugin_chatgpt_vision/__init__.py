@@ -195,7 +195,8 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             if content["type"] == "text":
                 return content["text"]
             if content["type"] == "image_url":
-                return f"[图片]({content['image_url']['url']})"
+                return f"[图片]"
+                # return f"[图片]({content['image_url']['url']})"
             return str(content)
         if isinstance(content, list):
             return "".join([to_str(i) for i in content])
