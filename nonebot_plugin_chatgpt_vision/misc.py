@@ -25,7 +25,6 @@ read = on_command(
 )
 copywrite = on_command(
     "copywrite",
-    rule=to_me(),
     priority=5,
     force_whitespace=True,
     block=True,
@@ -50,7 +49,7 @@ async def _(event: MessageEvent, args=CommandArg()):
             await read.finish(f"发生错误: {ex}")
 
 
-_copy: dict[str, list[str]] = {}
+_copy: dict[str, dict] = {}
 
 for file in pathlib.Path("./data/copywrite").glob("**/*.yaml"):
     with open(file, "r", encoding="utf-8") as f:
@@ -67,22 +66,42 @@ async def _(event: MessageEvent, args=CommandArg()):
         await copywrite.finish("请输入要仿写的文案名字")
 
     args = args.split(maxsplit=1)
+    args[0] = args[0].lower()
     if args[0] not in _copy:
         await copywrite.finish("没有找到该文案")
+    copy = _copy[args[0]]
+
+    args = args[1].split(maxsplit=copy.get("keywords", 0))
+    if len(args) < copy.get("keywords", 0):
+        await copywrite.finish(
+            copy.get("help", f'需要有{copy.get("keywords", 0)}个关键词')
+        )
+
     prompt = (
         """Below are some examples. Please mimic their wording and phrasing to generate content based on the given topics.
-        
+
 """
         + "\n".join(
             [
-                f"Example {i+1}:```\n{example}\n```"
-                for i, example in enumerate(_copy[args])
+                f"Example {i+1}:\n{example}\n"
+                for i, example in enumerate(copy["examples"])
             ]
+        )
+        + (
+            f"""
+
+Here is the specific point:
+{copy["addition"].format(*args[:-1])}"""
+            if copy.get("addition", "")
+            else ""
         )
         + """
 
 Topic: \n"""
-        + args[1]
+        + args[-1]
+        + """"
+
+Please complete, thank you."""
     )
 
     try:

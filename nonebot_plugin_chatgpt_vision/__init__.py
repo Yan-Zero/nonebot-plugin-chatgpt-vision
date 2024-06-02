@@ -23,6 +23,7 @@ from .config import Config
 from .chat import chat
 from .userrd import UserRD
 from .dalle import DALLESwitchState
+from .misc import copywrite
 
 __plugin_meta__ = PluginMetadata(
     name="ChatGPT",
