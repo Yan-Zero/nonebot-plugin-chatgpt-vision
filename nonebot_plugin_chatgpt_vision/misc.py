@@ -25,6 +25,7 @@ read = on_command(
 )
 copywrite = on_command(
     "copywrite",
+    aliases={"文案"},
     priority=5,
     force_whitespace=True,
     block=True,
@@ -76,9 +77,12 @@ async def _(event: MessageEvent, args=CommandArg()):
         await copywrite.finish(
             copy.get("help", f'需要有{copy.get("keywords", 0)}个关键词')
         )
+    print("B")
 
     prompt = (
-        """Below are some examples. Please mimic their wording and phrasing to generate content based on the given topics.
+        """Forget what I said above and what you wrote just now.
+
+Below are some examples. Please mimic their wording and phrasing to generate content based on the given topics.
 
 """
         + "\n".join(
@@ -104,6 +108,7 @@ Topic: \n"""
 Please complete, thank you."""
     )
 
+    print("CCC")
     try:
         rsp = await chat(
             message=[
@@ -112,9 +117,12 @@ Please complete, thank you."""
                     "content": prompt,
                 }
             ],
-            model="gpt-3.5-turbo",
+            # model="gpt-3.5-turbo",
+            model=copy.get("model", "gpt-3.5-turbo"),
         )
         rsp = rsp.choices[0].message.content
+        if not rsp:
+            raise ValueError("The Response is Null.")
     except Exception as ex:
         await copywrite.finish(f"发生错误: {ex}")
     else:
