@@ -1,6 +1,7 @@
 import yaml
 import pathlib
 
+from copywrite import generate_copywrite
 from nonebot import get_driver, on_command
 from nonebot.adapters.onebot.v11 import (
     MessageEvent,
@@ -51,8 +52,6 @@ async def _(event: MessageEvent, args=CommandArg()):
 
 
 _copy: dict[str, dict] = {}
-
-
 for file in pathlib.Path("./data/copywrite").glob("**/*.yaml"):
     with open(file, "r", encoding="utf-8") as f:
         _data = yaml.safe_load(f)
@@ -78,6 +77,7 @@ async def _(event: MessageEvent, args=CommandArg()):
     args[0] = args[0].lower()
     if args[0] not in _copy:
         await copywrite.finish("没有找到该文案")
+
     copy = _copy[args[0]]
     if len(args) == 1:
         await copywrite.finish(copy.get("help", "主题呢？"))
@@ -88,44 +88,18 @@ async def _(event: MessageEvent, args=CommandArg()):
             copy.get("help", f'需要有{copy.get("keywords", 0)}个关键词')
         )
 
-    prompt = (
-        """Forget what I said above and what you wrote just now.
-
-Below are some examples. Please mimic their wording and phrasing to generate content based on the given topics.
-
-"""
-        + "\n".join(
-            [
-                f"Example {i+1}:\n{example}\n"
-                for i, example in enumerate(copy["examples"])
-            ]
-        )
-        + (
-            f"""
-
-Here is the specific point:
-{copy["addition"].format(*args[:-1])}"""
-            if copy.get("addition", "")
-            else ""
-        )
-        + """
-
-Topic: \n"""
-        + args[-1]
-        + """"
-
-Please complete, thank you."""
-    )
-
     try:
         rsp = await chat(
             message=[
                 {
                     "role": "user",
-                    "content": prompt,
+                    "content": generate_copywrite(
+                        copy=copy,
+                        topic=args[-1],
+                        keywords=args[:-1],
+                    ),
                 }
             ],
-            # model="gpt-3.5-turbo",
             model=copy.get("model", "gpt-3.5-turbo"),
         )
         if not rsp:
