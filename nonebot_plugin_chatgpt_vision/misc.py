@@ -1,129 +1,122 @@
-import yaml
-import pathlib
+import random
+from typing import Any
+from datetime import datetime
+from datetime import timedelta
+from openai import APIError
+from openai import RateLimitError
+from openai import AsyncOpenAI
 
-from nonebot import get_driver, on_command
-from nonebot.adapters.onebot.v11 import (
-    MessageEvent,
-    PrivateMessageEvent,
-)
-from nonebot.adapters.onebot.v11 import GroupMessageEvent as V11GME
-from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
-from nonebot.params import CommandArg
-from nonebot.rule import to_me
-from nonebot.permission import SUPERUSER
-
-from .chat import POOL
-from .chat import chat
-
-superusers = get_driver().config.superusers
-read = on_command(
-    "read",
-    rule=to_me(),
-    priority=5,
-    force_whitespace=True,
-    block=True,
-)
-copywrite = on_command(
-    "copywrite",
-    aliases={"文案"},
-    priority=5,
-    force_whitespace=True,
-    block=True,
-)
+from nonebot import get_plugin_config
+from .config import Config
 
 
-@read.handle()
-async def _(event: MessageEvent, args=CommandArg()):
-    if isinstance(event, PrivateMessageEvent) and str(event.user_id) not in superusers:
-        await read.finish("私聊无法使用此功能")
-    if isinstance(event, V11GME):
-        if not event.reply:
-            await read.finish("请先回复一条消息")
-        try:
-            rsp = await POOL("tts-1-hd").audio.speech.create(
-                model="tts-1-hd",
-                voice="onyx",
-                input=event.reply.message.extract_plain_text(),
+class OpenAI_Config:
+    baseurl: str
+    apikey: str
+    model: str
+
+    def __init__(self, *, model: str, apikey: str = None, baseurl: str = None) -> None:
+        self.apikey = apikey
+        self.baseurl = baseurl
+        self.model = model
+
+
+class OpenAI_Pool:
+    __cilents: dict[str, list[AsyncOpenAI]]
+    __request_limit: dict[
+        str,
+        list[tuple[datetime, AsyncOpenAI, timedelta]],
+    ]
+
+    def __init__(self, config: list[OpenAI_Config] = None) -> None:
+        self.__cilents = {}
+        for i in config:
+            if i.model not in self.__cilents:
+                self.__cilents[i.model] = []
+            self.__cilents[i.model].append(
+                AsyncOpenAI(base_url=i.baseurl, api_key=i.apikey)
             )
-            await read.send(V11Seg.record(await rsp.aread()))
-        except Exception as ex:
-            await read.finish(f"发生错误: {ex}")
+        self.__request_limit = {}
 
-
-_copy: dict[str, dict] = {}
-
-for file in pathlib.Path("./data/copywrite").glob("**/*.yaml"):
-    with open(file, "r", encoding="utf-8") as f:
-        _copy.update(yaml.safe_load(f))
-for file in pathlib.Path(__file__).parent.glob("copywrite/*.yaml"):
-    with open(file, "r", encoding="utf-8") as f:
-        _copy.update(yaml.safe_load(f))
-
-
-@copywrite.handle()
-async def _(event: MessageEvent, args=CommandArg()):
-    args = args.extract_plain_text().strip()
-    if not args:
-        await copywrite.finish("请输入要仿写的文案名字")
-
-    args = args.split(maxsplit=1)
-    args[0] = args[0].lower()
-    if args[0] not in _copy:
-        await copywrite.finish("没有找到该文案")
-    copy = _copy[args[0]]
-
-    args = args[1].split(maxsplit=copy.get("keywords", 0))
-    if len(args) < copy.get("keywords", 0):
-        await copywrite.finish(
-            copy.get("help", f'需要有{copy.get("keywords", 0)}个关键词')
+    def add_config(self, config: OpenAI_Config) -> None:
+        self.__cilents.append(
+            AsyncOpenAI(base_url=config.baseurl, api_key=config.apikey)
         )
-    print("B")
 
-    prompt = (
-        """Forget what I said above and what you wrote just now.
+    def __call__(self, model: str, *args: Any, **kwds: Any) -> AsyncOpenAI:
+        cilent = self.__request_limit.get(model, [])
+        if cilent:
+            time, cilent, delta = cilent[0]
+            if datetime.now() - time > delta:
+                self.__request_limit[model].pop(0)
+                self.__cilents[model].append(cilent)
 
-Below are some examples. Please mimic their wording and phrasing to generate content based on the given topics.
+        cilent = random.choice(self.__cilents.get(model, []))
+        return cilent
 
-"""
-        + "\n".join(
-            [
-                f"Example {i+1}:\n{example}\n"
-                for i, example in enumerate(copy["examples"])
-            ]
+    def RequestLimit(self, model: str, cilent: AsyncOpenAI, timeout: timedelta):
+        index = -1
+
+        for i, c in enumerate(self.__cilents[model]):
+            if c.api_key != cilent.api_key:
+                continue
+            if c.base_url == cilent.base_url:
+                index = i
+                break
+        if index >= 0:
+            self.__cilents[model].pop(index)
+
+        if model not in self.__request_limit:
+            self.__request_limit[model] = []
+        self.__request_limit[model].append(
+            (datetime.now(), cilent, timedelta(minutes=timeout))
         )
-        + (
-            f"""
 
-Here is the specific point:
-{copy["addition"].format(*args[:-1])}"""
-            if copy.get("addition", "")
-            else ""
-        )
-        + """
 
-Topic: \n"""
-        + args[-1]
-        + """"
+config: Config = get_plugin_config(Config)
 
-Please complete, thank you."""
+list_for_config: list[OpenAI_Config] = []
+for i in range(len(config.openai_pool_model_config)):
+    model = config.openai_pool_model_config[i]
+    key = config.openai_pool_key_config[i]
+    url = config.openai_pool_baseurl_config[i]
+    if url == "ditto":
+        url = list_for_config[-1].baseurl
+    if model == "ditto":
+        model = list_for_config[-1].model
+    if key == "ditto":
+        key = list_for_config[-1].apikey
+    list_for_config.append(OpenAI_Config(baseurl=url, apikey=key, model=model))
+
+POOL = OpenAI_Pool(config=list_for_config)
+
+
+async def chat(message: list, model: str, times: int = 3):
+    """
+    Chat with ChatGPT
+
+    Parameters
+    ----------
+    message : list
+        The message you want to send to ChatGPT
+    model : str
+        The model you want to use
+    times : int
+        The times you want to try
+    """
+    for _ in range(times - 1):
+        cilent = POOL(model=model)
+        try:
+            rsp = await cilent.chat.completions.create(messages=message, model=model)
+            if not rsp:
+                raise ValueError("The Response is Null.")
+            if not rsp.choices:
+                raise ValueError("The Choice is Null.")
+            return rsp
+        except RateLimitError:
+            POOL.RequestLimit(model=model, cilent=cilent, timeout=120)
+        except ValueError:
+            pass
+    return await POOL(model=model).chat.completions.create(
+        messages=message, model=model
     )
-
-    print("CCC")
-    try:
-        rsp = await chat(
-            message=[
-                {
-                    "role": "user",
-                    "content": prompt,
-                }
-            ],
-            # model="gpt-3.5-turbo",
-            model=copy.get("model", "gpt-3.5-turbo"),
-        )
-        rsp = rsp.choices[0].message.content
-        if not rsp:
-            raise ValueError("The Response is Null.")
-    except Exception as ex:
-        await copywrite.finish(f"发生错误: {ex}")
-    else:
-        await copywrite.finish(rsp)

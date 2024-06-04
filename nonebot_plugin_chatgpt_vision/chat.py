@@ -108,9 +108,15 @@ async def chat(message: list, model: str, times: int = 3):
         cilent = POOL(model=model)
         try:
             rsp = await cilent.chat.completions.create(messages=message, model=model)
+            if not rsp:
+                raise ValueError("The Response is Null.")
+            if not rsp.choices:
+                raise ValueError("The Choice is Null.")
             return rsp
         except RateLimitError:
             POOL.RequestLimit(model=model, cilent=cilent, timeout=120)
+        except ValueError:
+            pass
     return await POOL(model=model).chat.completions.create(
         messages=message, model=model
     )
