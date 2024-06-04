@@ -52,12 +52,17 @@ async def _(event: MessageEvent, args=CommandArg()):
 
 _copy: dict[str, dict] = {}
 
+
 for file in pathlib.Path("./data/copywrite").glob("**/*.yaml"):
     with open(file, "r", encoding="utf-8") as f:
-        _copy.update(yaml.safe_load(f))
+        _data = yaml.safe_load(f)
+        if isinstance(_data, dict):
+            _copy.update(_data)
 for file in pathlib.Path(__file__).parent.glob("copywrite/*.yaml"):
     with open(file, "r", encoding="utf-8") as f:
-        _copy.update(yaml.safe_load(f))
+        _data = yaml.safe_load(f)
+        if isinstance(_data, dict):
+            _copy.update(_data)
 
 
 @copywrite.handle()
@@ -74,6 +79,8 @@ async def _(event: MessageEvent, args=CommandArg()):
     if args[0] not in _copy:
         await copywrite.finish("没有找到该文案")
     copy = _copy[args[0]]
+    if len(args) == 1:
+        await copywrite.finish(copy.get("help", "主题呢？"))
 
     args = args[1].split(maxsplit=copy.get("keywords", 0))
     if len(args) < copy.get("keywords", 0):
@@ -110,7 +117,6 @@ Topic: \n"""
 Please complete, thank you."""
     )
 
-    print("CCC")
     try:
         rsp = await chat(
             message=[
