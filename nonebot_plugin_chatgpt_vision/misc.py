@@ -1,7 +1,7 @@
 import yaml
 import pathlib
 
-from copywrite import generate_copywrite
+from .copywrite import generate_copywrite
 from nonebot import get_driver, on_command
 from nonebot.adapters.onebot.v11 import (
     MessageEvent,
