@@ -113,8 +113,6 @@ async def chat(message: list, model: str, times: int = 3):
             if not rsp.choices:
                 raise ValueError("The Choice is Null.")
             return rsp
-        except RateLimitError:
-            POOL.RequestLimit(model=model, cilent=cilent, timeout=120)
         except ValueError:
             pass
     return await POOL(model=model).chat.completions.create(

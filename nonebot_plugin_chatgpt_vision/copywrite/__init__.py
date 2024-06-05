@@ -20,10 +20,10 @@ Here is the specific point:
             else ""
         )
         + """
-
 Topic: \n"""
         + topic
         + """"
 
+(保持相似格式)
 Please complete, thank you."""
     )
