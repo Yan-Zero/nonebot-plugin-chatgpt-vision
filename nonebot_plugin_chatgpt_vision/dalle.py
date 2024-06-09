@@ -1,7 +1,9 @@
 import asyncio
+import aiohttp
 import yaml
 from typing import Optional
 from nonebot import get_driver, on_command
+from nonebot import get_plugin_config
 from nonebot.adapters.onebot.v11 import (
     Message,
     MessageEvent,
@@ -19,6 +21,7 @@ from openai import BadRequestError
 
 from .chat import POOL
 from .chat import chat
+from .config import Config
 
 
 class Size(Enum):
@@ -26,6 +29,8 @@ class Size(Enum):
     MEDIUM = "512x512"
     LARGE = "1024x1024"
 
+
+p_config: Config = get_plugin_config(Config)
 
 # 全局变量，用于存储DALL·E的开关状态、图片尺寸，以及正在绘图的用户
 drawing_users = {}  # 用于存储正在绘图的用户
@@ -52,6 +57,12 @@ dell_llm = on_command(
 )
 dall_drawing = on_command(
     "draw",
+    rule=to_me(),
+    priority=2,
+    block=True,
+)
+sd_drawing = on_command(
+    "sd",
     rule=to_me(),
     priority=2,
     block=True,
@@ -96,12 +107,28 @@ async def draw_image(model: str, prompt: str, size=Size.LARGE.value, times: int 
     )
 
 
+async def draw_sd(prompt: str, size=Size.LARGE.value, times: int = 1):
+    async with aiohttp.ClientSession() as session:
+        rsp = session.post(
+            url=p_config.sd_url,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {p_config.sd_key}",
+                "Accept": "application/json",
+            },
+            json={
+                "prompt": prompt,
+                "size": size,
+                "batch_size": 1,
+                "num_inference_steps": 55,
+                "guidance_scale": 9,
+            },
+        )
+        return await rsp.json()
+
+
 @dall_drawing.handle()
 async def _(event: MessageEvent, arg: Message = CommandArg()):
-    await do_drawing(event, arg)
-
-
-async def do_drawing(event: MessageEvent, arg: Optional[Message] = None):
     global drawing_users
     user_id = str(event.user_id)
     async with drawing_users_lock:
@@ -151,7 +178,8 @@ The generated prompt sent to dalle should be very detailed, and around 100 words
                                         "user_request": rsp,
                                         "return_format": "yaml",
                                         "response_format": """prompt: ...""",
-                                    }
+                                    },
+                                    allow_unicode=True,
                                 ),
                             }
                         ],
@@ -179,3 +207,109 @@ The generated prompt sent to dalle should be very detailed, and around 100 words
             del drawing_users[user_id]
     response_message = [V11Seg.image(result)] if success else error
     await dall_drawing.finish(response_message, at_sender=True)
+
+
+@sd_drawing.handle()
+async def do_sd(event: MessageEvent, arg: Optional[Message] = None):
+    global drawing_users
+    user_id = str(event.user_id)
+    async with drawing_users_lock:
+        if isinstance(event, PrivateMessageEvent) and user_id not in superusers:
+            await sd_drawing.finish("私聊无法使用此功能")
+
+        # 检查是否用户已经在绘图
+        if user_id in drawing_users:
+            await sd_drawing.finish(
+                "你已经有一个绘图任务在进行中，请等待完成后再发起新的请求",
+                at_sender=True,
+            )
+
+        if not DALLESwitchState:
+            await sd_drawing.finish("绘图功能未开启")
+
+        # 把用户添加到绘图用户列表
+        drawing_users[user_id] = True
+
+    success = False
+    error = ""
+    try:
+        await sd_drawing.send("正在绘图，请稍等...", at_sender=True)
+        rsp = arg.extract_plain_text()
+        if DALLEPromptState:
+            rsp = (
+                (
+                    await chat(
+                        message=[
+                            {
+                                "role": "user",
+                                "content": yaml.safe_dump(
+                                    {
+                                        "stable-diffusion": """I want you to help me make requests (prompts) for the Stable Diffusion neural network.
+
+Stable diffusion is a text-based image generation model that can create diverse and high-quality images based on your requests. In order to get the best results from Stable diffusion, you need to follow some guidelines when composing prompts.
+
+Here are some tips for writing prompts for Stable diffusion1:
+
+1) Be as specific as possible in your requests. Stable diffusion handles concrete prompts better than abstract or ambiguous ones. For example, instead of “portrait of a woman” it is better to write “portrait of a woman with brown eyes and red hair in Renaissance style”.
+2) Specify specific art styles or materials. If you want to get an image in a certain style or with a certain texture, then specify this in your request. For example, instead of “landscape” it is better to write “watercolor landscape with mountains and lake".
+3) Specify specific artists for reference. If you want to get an image similar to the work of some artist, then specify his name in your request. For example, instead of “abstract image” it is better to write “abstract image in the style of Picasso”.
+4) Weigh your keywords. You can use token:1.3 to specify the weight of keywords in your query. The greater the weight of the keyword, the more it will affect the result. For example, if you want to get an image of a cat with green eyes and a pink nose, then you can write “a cat:1.5, green eyes:1.3,pink nose:1”. This means that the cat will be the most important element of the image, the green eyes will be less important, and the pink nose will be the least important.
+Another way to adjust the strength of a keyword is to use () and []. (keyword) increases the strength of the keyword by 1.1 times and is equivalent to (keyword:1.1). [keyword] reduces the strength of the keyword by 0.9 times and corresponds to (keyword:0.9).
+
+You can use several of them, as in algebra... The effect is multiplicative.
+
+(keyword): 1.1
+((keyword)): 1.21
+(((keyword))): 1.33
+
+
+Similarly, the effects of using multiple [] are as follows
+
+[keyword]: 0.9
+[[keyword]]: 0.81
+[[[keyword]]]: 0.73
+
+I will also give some examples of good prompts for this neural network so that you can study them and focus on them.
+
+My query may be in other languages. In that case, translate it into English. Your answer is exclusively in English (IMPORTANT!!!), since the model only understands it.
+Also, you should not copy my request directly in your response, you should compose a new one, observing the format given in the examples.
+Don't add your comments, but answer right away.""",
+                                        "user_request": rsp,
+                                        "return_format": "yaml",
+                                        "response_format": """prompt: ...""",
+                                        "examples": [
+                                            "a cute kitten made out of metal, (cyborg:1.1), ([tail | detailed wire]:1.3), (intricate details), hdr, (intricate details, hyperdetailed:1.2), cinematic shot, vignette, centered",
+                                            "medical mask, victorian era, cinematography, intricately detailed, crafted, meticulous, magnificent, maximum details, extremely hyper aesthetic",
+                                            "a girl, wearing a tie, cupcake in her hands, school, indoors, (soothing tones:1.25), (hdr:1.25), (artstation:1.2), dramatic, (intricate details:1.14), (hyperrealistic 3d render:1.16), (filmic:0.55), (rutkowski:1.1), (faded:1.3)",
+                                            "Jane Eyre with headphones, natural skin texture, 24mm, 4k textures, soft cinematic light, adobe lightroom, photolab, hdr, intricate, elegant, highly detailed, sharp focus, ((((cinematic look)))), soothing tones, insane details, intricate details, hyperdetailed, low contrast, soft cinematic light, dim colors, exposure blend, hdr, faded",
+                                            "a portrait of a laughing, toxic, muscle, god, elder, (hdr:1.28), bald, hyperdetailed, cinematic, warm lights, intricate details, hyperrealistic, dark radial background, (muted colors:1.38), (neutral colors:1.2)",
+                                        ],
+                                    },
+                                    allow_unicode=True,
+                                ),
+                            }
+                        ],
+                        model="gpt-3.5-turbo",
+                    )
+                )
+                .choices[0]
+                .message.content
+            )
+        try:
+            rsp = yaml.safe_load(rsp)
+            rsp = rsp["prompt"]
+        except Exception:
+            rsp = rsp
+
+        result = await draw_sd(rsp)
+        result = result["images"][0]["url"]
+        success = True
+    except BadRequestError as bd:
+        error = str(bd.message)
+    except Exception as ex:
+        error = str(ex)
+    finally:
+        async with drawing_users_lock:
+            del drawing_users[user_id]
+    response_message = [V11Seg.image(result)] if success else error
+    await sd_drawing.finish(response_message, at_sender=True)

@@ -28,3 +28,8 @@ class Config(BaseModel):
     human_like_max_tokens: int = 6000
     human_like_max_log: int = 30
     human_like_group: list[str] = []
+
+    sd_url: str = (
+        "https://api.siliconflow.cn/v1/stabilityai/stable-diffusion-xl-base-1.0/text-to-image"
+    )
+    sd_key: str = ""
