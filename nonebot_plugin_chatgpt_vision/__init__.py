@@ -223,11 +223,11 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
             },
         )
         rsp = await chat(message=record.chatlog, model=record.model)
+        message = rsp.choices[0].message.content
+        if not message:
+            await m_chat.finish("好像什么都没说……")
         if record.append(rsp.model_dump()):
             await m_chat.send(f"你的模型变成 {p_config.fallback_model} 了。")
-        print(rsp.choices)
-        message = rsp.choices[0].message.content
-        print("B")
         if isinstance(args, V11M):
             if "$" in message or "\\[" in message or "\\(" in message:
                 try:

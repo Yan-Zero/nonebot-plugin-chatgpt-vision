@@ -1,4 +1,5 @@
 import asyncio
+import yaml
 from typing import Optional
 from nonebot import get_driver, on_command
 from nonebot.adapters.onebot.v11 import (
@@ -132,7 +133,9 @@ async def do_drawing(event: MessageEvent, arg: Optional[Message] = None):
                         message=[
                             {
                                 "role": "user",
-                                "content": """Whenever a description of an image is given, create a prompt that dalle can use to generate the image and abide to the following policy:
+                                "content": yaml.safe_dump(
+                                    {
+                                        "dall-e-3": """Whenever a description of an image is given, create a prompt that dalle can use to generate the image and abide to the following policy:
 
 1. The prompt must be in English. Translate to English if needed.
 2. DO NOT ask for permission to generate the image, just do it!
@@ -144,17 +147,13 @@ async def do_drawing(event: MessageEvent, arg: Optional[Message] = None):
 6. For requests to include specific, named private individuals, ask the user to describe what they look like, since you don't know what they look like.
 7. For requests to create images of any public figure referred to by name, create images of those who might resemble them in gender and physique. But they shouldn't look like them. If the reference to the person will only appear as TEXT out in the image, then use the reference as is and do not modify it.
 8. Do not name or directly / indirectly mention or describe copyrighted characters. Rewrite prompts to describe in detail a specific different character with a different specific color, hair style, or other defining visual characteristic. Do not discuss copyright policies in responses.
-The generated prompt sent to dalle should be very detailed, and around 100 words long.
-```""",
-                            },
-                            {
-                                "role": "user",
-                                "content": """在接下来我无论发什么都是你要画的。你的回复应该符合上面的要求，并且只有 prompt，不需要以 json 格式写出。
-
-这是绘画要求:
-"""
-                                + rsp,
-                            },
+The generated prompt sent to dalle should be very detailed, and around 100 words long.""",
+                                        "user_request": rsp,
+                                        "return_format": "yaml",
+                                        "response_format": """prompt: ...""",
+                                    }
+                                ),
+                            }
                         ],
                         model="gpt-3.5-turbo",
                     )
@@ -162,6 +161,11 @@ The generated prompt sent to dalle should be very detailed, and around 100 words
                 .choices[0]
                 .message.content
             )
+        try:
+            rsp = yaml.safe_load(rsp)
+            rsp = rsp["prompt"]
+        except Exception:
+            rsp = rsp
 
         result = await draw_image(model="dall-e-3", prompt=rsp)
         result = result.data[0].url
