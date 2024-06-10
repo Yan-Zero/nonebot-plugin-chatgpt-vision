@@ -1,6 +1,7 @@
 import yaml
 import pathlib
-
+import base64
+import aiohttp
 from .copywrite import generate_copywrite
 from nonebot import get_driver, on_command
 from nonebot.adapters.onebot.v11 import (
@@ -31,6 +32,16 @@ copywrite = on_command(
     force_whitespace=True,
     block=True,
 )
+
+
+async def send_image_as_base64(url: str):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as response:
+            if response.status == 200:
+                b64_encoded = base64.b64encode(await response.read()).decode("utf-8")
+                return f"data:image/jpeg;base64,{b64_encoded}"
+            else:
+                return None
 
 
 @read.handle()

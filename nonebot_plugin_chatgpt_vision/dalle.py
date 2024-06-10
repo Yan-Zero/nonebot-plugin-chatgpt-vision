@@ -22,6 +22,7 @@ from openai import BadRequestError
 from .chat import POOL
 from .chat import chat
 from .config import Config
+from .misc import send_image_as_base64
 
 
 class Size(Enum):
@@ -107,23 +108,41 @@ async def draw_image(model: str, prompt: str, size=Size.LARGE.value, times: int 
     )
 
 
-async def draw_sd(prompt: str, size=Size.LARGE.value, times: int = 1):
+async def draw_sd(
+    prompt: str,
+    n_prompt: str = "",
+    image: str = None,
+    size=Size.LARGE.value,
+    times: int = 1,
+):
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {p_config.sd_key}",
+        "Accept": "application/json",
+    }
+    data = {
+        "prompt": prompt,
+        "size": size,
+        "batch_size": 1,
+        "num_inference_steps": 40,
+        "guidance_scale": 8,
+        "negative_prompt": n_prompt,
+    }
+
     async with aiohttp.ClientSession() as session:
-        rsp = session.post(
-            url=p_config.sd_url,
-            headers={
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {p_config.sd_key}",
-                "Accept": "application/json",
-            },
-            json={
-                "prompt": prompt,
-                "size": size,
-                "batch_size": 1,
-                "num_inference_steps": 55,
-                "guidance_scale": 9,
-            },
-        )
+        if image:
+            data["image"] = image
+            rsp = await session.post(
+                url=p_config.sd_url + "image-to-image",
+                headers=headers,
+                json=data,
+            )
+        else:
+            rsp = await session.post(
+                url=p_config.sd_url + "text-to-image",
+                headers=headers,
+                json=data,
+            )
         return await rsp.json()
 
 
@@ -210,7 +229,7 @@ The generated prompt sent to dalle should be very detailed, and around 100 words
 
 
 @sd_drawing.handle()
-async def do_sd(event: MessageEvent, arg: Optional[Message] = None):
+async def do_sd(event: MessageEvent, arg: Message = CommandArg()):
     global drawing_users
     user_id = str(event.user_id)
     async with drawing_users_lock:
@@ -230,25 +249,23 @@ async def do_sd(event: MessageEvent, arg: Optional[Message] = None):
         # 把用户添加到绘图用户列表
         drawing_users[user_id] = True
 
+    image = None
+    if event.reply:
+        url = event.reply.message.get("image", 1)
+        if url:
+            image = await send_image_as_base64(url[0])
+
     success = False
     error = ""
     try:
         await sd_drawing.send("正在绘图，请稍等...", at_sender=True)
         rsp = arg.extract_plain_text()
         if DALLEPromptState:
-            rsp = (
-                (
-                    await chat(
-                        message=[
-                            {
-                                "role": "user",
-                                "content": yaml.safe_dump(
-                                    {
-                                        "stable-diffusion": """I want you to help me make requests (prompts) for the Stable Diffusion neural network.
+            t = yaml.safe_dump(
+                {
+                    "details": """Stable diffusion is a text-based image generation model that can create diverse and high-quality images based on your requests. In order to get the best results from Stable diffusion, you need to follow some guidelines when composing prompts.
 
-Stable diffusion is a text-based image generation model that can create diverse and high-quality images based on your requests. In order to get the best results from Stable diffusion, you need to follow some guidelines when composing prompts.
-
-Here are some tips for writing prompts for Stable diffusion1:
+Here are some tips for writing prompts for Stable diffusion:
 
 1) Be as specific as possible in your requests. Stable diffusion handles concrete prompts better than abstract or ambiguous ones. For example, instead of “portrait of a woman” it is better to write “portrait of a woman with brown eyes and red hair in Renaissance style”.
 2) Specify specific art styles or materials. If you want to get an image in a certain style or with a certain texture, then specify this in your request. For example, instead of “landscape” it is better to write “watercolor landscape with mountains and lake".
@@ -262,7 +279,6 @@ You can use several of them, as in algebra... The effect is multiplicative.
 ((keyword)): 1.21
 (((keyword))): 1.33
 
-
 Similarly, the effects of using multiple [] are as follows
 
 [keyword]: 0.9
@@ -273,35 +289,50 @@ I will also give some examples of good prompts for this neural network so that y
 
 My query may be in other languages. In that case, translate it into English. Your answer is exclusively in English (IMPORTANT!!!), since the model only understands it.
 Also, you should not copy my request directly in your response, you should compose a new one, observing the format given in the examples.
-Don't add your comments, but answer right away.""",
-                                        "user_request": rsp,
-                                        "return_format": "yaml",
-                                        "response_format": """prompt: ...""",
-                                        "examples": [
-                                            "a cute kitten made out of metal, (cyborg:1.1), ([tail | detailed wire]:1.3), (intricate details), hdr, (intricate details, hyperdetailed:1.2), cinematic shot, vignette, centered",
-                                            "medical mask, victorian era, cinematography, intricately detailed, crafted, meticulous, magnificent, maximum details, extremely hyper aesthetic",
-                                            "a girl, wearing a tie, cupcake in her hands, school, indoors, (soothing tones:1.25), (hdr:1.25), (artstation:1.2), dramatic, (intricate details:1.14), (hyperrealistic 3d render:1.16), (filmic:0.55), (rutkowski:1.1), (faded:1.3)",
-                                            "Jane Eyre with headphones, natural skin texture, 24mm, 4k textures, soft cinematic light, adobe lightroom, photolab, hdr, intricate, elegant, highly detailed, sharp focus, ((((cinematic look)))), soothing tones, insane details, intricate details, hyperdetailed, low contrast, soft cinematic light, dim colors, exposure blend, hdr, faded",
-                                            "a portrait of a laughing, toxic, muscle, god, elder, (hdr:1.28), bald, hyperdetailed, cinematic, warm lights, intricate details, hyperrealistic, dark radial background, (muted colors:1.38), (neutral colors:1.2)",
-                                        ],
-                                    },
-                                    allow_unicode=True,
-                                ),
-                            }
-                        ],
-                        model="gpt-3.5-turbo",
+Don't add your comments, but answer right away.
+
+Your respone shouldn't be in a code block.""",
+                    "accept": "yaml",
+                    "response_format": "prompt: ...\nnegative_prompt: ...",
+                    "examples": [
+                        "negative_prompt: fused face, fused thigh, three legs, three feet\nprompt: a cute kitten made out of metal, (cyborg:1.1), ([tail | detailed wire]:1.3), (intricate details), hdr, (intricate details, hyperdetailed:1.2), cinematic shot, vignette, centered",
+                        "negative_prompt: poorly drawn face, realistic photo\nprompt: a girl, wearing a tie, cupcake in her hands, school, indoors, (soothing tones:1.25), (hdr:1.25), (artstation:1.2), dramatic, (intricate details:1.14), (hyperrealistic 3d render:1.16), (filmic:0.55), (rutkowski:1.1), (faded:1.3)",
+                        "negative_prompt: worst face, bad hands, three legs, fused crus\nprompt: medical mask, victorian era, cinematography, intricately detailed, crafted, meticulous, magnificent, maximum details, extremely hyper aesthetic",
+                        "negative_prompt: nsfw, extra fingers, bad anatomy, 3d\nprompt: Jane Eyre with headphones, natural skin texture, 24mm, 4k textures, soft cinematic light, adobe lightroom, photolab, hdr, intricate, elegant, highly detailed, sharp focus, ((((cinematic look)))), soothing tones, insane details, intricate details, hyperdetailed, low contrast, soft cinematic light, dim colors, exposure blend, hdr, faded",
+                    ],
+                    "request": rsp,
+                },
+                allow_unicode=True,
+                width=1000,
+            )
+            with open("./t", "w+") as f:
+                f.write(t)
+            rsp = (
+                (
+                    await chat(
+                        message=[{"role": "user", "content": t}],
+                        model="glm-4",
                     )
                 )
                 .choices[0]
                 .message.content
             )
-        try:
-            rsp = yaml.safe_load(rsp)
-            rsp = rsp["prompt"]
-        except Exception:
-            rsp = rsp
+            if rsp[:3] == "```":
+                rsp = rsp[3:-3]
+                if rsp[:4] == "yaml":
+                    rsp = rsp[4:]
 
-        result = await draw_sd(rsp)
+        try:
+            with open("./a", "w+") as f:
+                f.write(rsp)
+            rsp = yaml.safe_load(rsp)
+        except Exception:
+            rsp = {
+                "prompt": rsp,
+                "negative_prompt": "fused face, fused thigh, three legs, three feet",
+            }
+
+        result = await draw_sd(rsp["prompt"], rsp["negative_prompt"])
         result = result["images"][0]["url"]
         success = True
     except BadRequestError as bd:

@@ -1,7 +1,5 @@
 import hashlib
 import re
-import base64
-import aiohttp
 import pypandoc
 from PIL import Image
 from io import BytesIO
@@ -19,11 +17,11 @@ from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11GME
 from nonebot.permission import SUPERUSER
 
+from .misc import send_image_as_base64
 from .config import Config
 from .chat import chat
 from .userrd import UserRD
 from .dalle import DALLESwitchState
-from .misc import copywrite
 
 __plugin_meta__ = PluginMetadata(
     name="ChatGPT",
@@ -41,16 +39,6 @@ m_chat = on_command("chat", priority=40, force_whitespace=True, block=True)
 reset = on_command("reset", priority=5, force_whitespace=True, block=True)
 my_model = on_command("my_model", priority=5, force_whitespace=True, block=True)
 render = AsyncLatex2PNG()
-
-
-async def send_image_as_base64(url: str):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                b64_encoded = base64.b64encode(await response.read()).decode("utf-8")
-                return f"data:image/jpeg;base64,{b64_encoded}"
-            else:
-                return None
 
 
 @reset.handle()

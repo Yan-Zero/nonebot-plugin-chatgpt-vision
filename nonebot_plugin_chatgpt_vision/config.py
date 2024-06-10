@@ -30,6 +30,6 @@ class Config(BaseModel):
     human_like_group: list[str] = []
 
     sd_url: str = (
-        "https://api.siliconflow.cn/v1/stabilityai/stable-diffusion-xl-base-1.0/text-to-image"
+        "https://api.siliconflow.cn/v1/stabilityai/stable-diffusion-xl-base-1.0/"
     )
     sd_key: str = ""
