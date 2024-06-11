@@ -241,7 +241,7 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 {
                     "type": "node",
                     "data": {
-                        "uin": str(event.get_user_id()),
+                        "uin": "114514",
                         "name": "GPT",
                         "content": i,
                     },
@@ -256,9 +256,15 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
                 {
                     "type": "node",
                     "data": {
-                        "uin": str(event.get_user_id()),
+                        "uin": (
+                            str(event.get_user_id())
+                            if i["role"] == "user"
+                            else "114514"
+                        ),
                         "name": i["role"],
-                        "content": V11Seg.text(f"{i['role']}:\n{to_str(i['content'])}"),
+                        "content": V11Seg.text(
+                            f"{ i['role']}:\n{to_str(i['content'])}"
+                        ),
                     },
                 }
                 for i in record.chatlog[:-1]

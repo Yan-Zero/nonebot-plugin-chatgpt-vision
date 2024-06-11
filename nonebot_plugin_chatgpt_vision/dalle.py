@@ -251,7 +251,7 @@ async def do_sd(event: MessageEvent, arg: Message = CommandArg()):
 
     image = None
     if event.reply:
-        url = event.reply.message.get("image", 1)
+        url = event.reply.message.get(type_="image")
         if url:
             image = await send_image_as_base64(url[0])
 
@@ -332,7 +332,7 @@ Your respone shouldn't be in a code block.""",
                 "negative_prompt": "fused face, fused thigh, three legs, three feet",
             }
 
-        result = await draw_sd(rsp["prompt"], rsp["negative_prompt"])
+        result = await draw_sd(rsp["prompt"], rsp["negative_prompt"], image=image)
         result = result["images"][0]["url"]
         success = True
     except BadRequestError as bd:
