@@ -38,3 +38,5 @@ class Config(BaseModel):
     embedding_sqlurl: str
     dashscope_api: str
     notfound_with_jpg: bool = True
+
+    image_model: int = 1

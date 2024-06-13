@@ -91,7 +91,7 @@ for i in range(len(config.openai_pool_model_config)):
 POOL = OpenAI_Pool(config=list_for_config)
 
 
-async def chat(message: list, model: str, times: int = 3):
+async def chat(message: list, model: str, times: int = 3, temperature: int = 0.65):
     """
     Chat with ChatGPT
 
@@ -107,7 +107,9 @@ async def chat(message: list, model: str, times: int = 3):
     for _ in range(times - 1):
         cilent = POOL(model=model)
         try:
-            rsp = await cilent.chat.completions.create(messages=message, model=model)
+            rsp = await cilent.chat.completions.create(
+                messages=message, model=model, temperature=temperature
+            )
             if not rsp:
                 raise ValueError("The Response is Null.")
             if not rsp.choices:
@@ -116,5 +118,5 @@ async def chat(message: list, model: str, times: int = 3):
         except ValueError:
             pass
     return await POOL(model=model).chat.completions.create(
-        messages=message, model=model
+        messages=message, model=model, temperature=temperature
     )
