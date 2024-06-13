@@ -99,7 +99,7 @@ class GroupRecord:
             self.msgs[-1].msg += "\n" + msg
         else:
             self.msgs.append(RecordSeg(user_name, user_id, msg, time))
-        if len(self.msgs) > 40:
+        if len(self.msgs) > p_config.human_like_max_log:
             self.msgs.pop(0)
 
     def block(self, id: str):

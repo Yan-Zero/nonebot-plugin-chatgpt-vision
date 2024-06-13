@@ -26,7 +26,7 @@ class Config(BaseModel):
 
     human_like_chat: bool = False
     human_like_max_tokens: int = 6000
-    human_like_max_log: int = 30
+    human_like_max_log: int = 40
     human_like_group: list[str] = []
 
     sd_url: str = (
