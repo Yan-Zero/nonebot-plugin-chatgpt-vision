@@ -22,6 +22,7 @@ from .config import Config
 from .chat import chat
 from .userrd import UserRD
 from .dalle import DALLESwitchState
+from .human_like import GroupRecord
 
 __plugin_meta__ = PluginMetadata(
     name="ChatGPT",
