@@ -57,6 +57,7 @@ class GroupRecord:
     min_rest: int
     cd: float
     inline_content: dict[str, str]
+    lock: asyncio.Lock
 
     def __init__(
         self,
@@ -86,6 +87,7 @@ class GroupRecord:
         self.min_rest = min_rest
         self.cd = cd
         self.split = split
+        self.lock = asyncio.Lock()
         self.searcher = get_searcher(searcher)
         self.delta = timedelta(seconds=ban_delta)
         self.model = model
@@ -408,62 +410,64 @@ async def _(bot: Bot, event: V11G, state):
     else:
         user_name = CACHE_NAME[uid]
     user_name = user_name.replace("，", ",").replace("。", ".")
-
-    msg = "".join(await seg2text(seg) for seg in event.get_message()).strip()
-    if event.reply:
-        _uid = event.reply.sender.user_id
-        if _uid in CACHE_NAME:
-            name = CACHE_NAME[_uid]
-        else:
-            name = event.reply.sender.nickname
-            if not name or not name.strip():
-                name = str(_uid)[:5]
-            CACHE_NAME[_uid] = name
-        msg = (
-            "\n> ".join(
-                (
-                    f"Reply to @{name}({_uid})\n"
-                    + "".join(await seg2text(seg) for seg in event.reply.message).strip()
-                ).split("\n")
-            )
-            + "\n\n"
-            + msg
-        )
-
+    msg = ""
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
-    if not msg:
-        msg = "[NULL]"
-    elif await to_me()(bot=bot, event=event, state=state):
-        msg += f"@{group.bot_name}({group.bot_id})"
-    group.append(user_name, uid, msg, event.message_id, datetime.now())
+    async with group.lock:
+        for seg in event.get_message():
+            msg += await seg2text(seg)
+        msg = msg.strip()
+        if event.reply:
+            _uid = event.reply.sender.user_id
+            if _uid in CACHE_NAME:
+                name = CACHE_NAME[_uid]
+            else:
+                name = event.reply.sender.nickname
+                if not name or not name.strip():
+                    name = str(_uid)[:5]
+                CACHE_NAME[_uid] = name
+            temp = ""
+            for seg in event.reply.message:
+                temp += await seg2text(seg)
+            temp = temp.strip()
+            msg = (
+                "\n> ".join((f"Reply to @{name}({_uid})\n" + temp).split("\n"))
+                + "\n\n"
+                + msg
+            )
 
-    if msg == "[NULL]":
-        return
-    if msg.startswith("/"):
-        return
-    if group.check(uid, datetime.now()):
-        return
-    if group.last_time + timedelta(seconds=group.cd) > datetime.now():
-        return True
+        if not msg:
+            msg = "[NULL]"
+        elif await to_me()(bot=bot, event=event, state=state):
+            msg += f"@{group.bot_name}({group.bot_id})"
+        group.append(user_name, uid, msg, event.message_id, datetime.now())
 
-    group.rest -= 1
-    if group.rest > 0:
-        if not await to_me()(bot=bot, event=event, state=state):
+        if msg == "[NULL]":
             return
-        elif random.random() < 0.02:
+        if msg.startswith("/"):
             return
-    group.rest = random.randint(group.min_rest, group.max_rest)
-    group.last_time = datetime.now()
+        if group.check(uid, datetime.now()):
+            return
+        if group.last_time + timedelta(seconds=group.cd) > datetime.now():
+            return True
 
-    try:
-        for s in await group.say():
-            if s == "[NULL]":
-                continue
-            await asyncio.sleep(len(s) / 100)
-            s = await parser_msg(s, group, event)
-            await humanlike.send(V11Msg(s))
-    except Exception as ex:
-        print(ex)
+        group.rest -= 1
+        if group.rest > 0:
+            if not await to_me()(bot=bot, event=event, state=state):
+                return
+            elif random.random() < 0.02:
+                return
+        group.rest = random.randint(group.min_rest, group.max_rest)
+        group.last_time = datetime.now()
+
+        try:
+            for s in await group.say():
+                if s == "[NULL]":
+                    continue
+                await asyncio.sleep(len(s) / 100)
+                s = await parser_msg(s, group, event)
+                await humanlike.send(V11Msg(s))
+        except Exception as ex:
+            print(ex)
 
 
 async def human_like_on_notice(bot: Bot, event: Event):

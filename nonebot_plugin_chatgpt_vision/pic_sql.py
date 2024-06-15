@@ -1,4 +1,5 @@
 import aiohttp
+import json
 from nonebot import get_driver
 from nonebot import get_plugin_config
 
@@ -182,7 +183,8 @@ async def resnet_50(url: str) -> str:
         )
         if rsp.status != 200:
             return "notfound"
-        data = await rsp.json()
-        if not data.get("success"):
+        try:
+            data = await rsp.text()
+            return json.loads(data)["description"].strip().replace('"', "")
+        except Exception:
             return "notfound"
-        return data["result"][0]["label"]
