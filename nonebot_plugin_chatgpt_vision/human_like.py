@@ -215,7 +215,9 @@ class GroupRecord:
             self.block_list = {}
             return ["触发警告了，上下文莫得了哦。"]
         msg = msg.replace(":", "：").split("：", maxsplit=1)[-1]
+        _search = False
         for i in re.finditer(r"\[ask,(.*?)\]", msg):
+            _search = True
             rsp = await self.search(i.group(1))
             if rsp:
                 self.append(
@@ -232,27 +234,8 @@ class GroupRecord:
                     1,
                     datetime.now(),
                 )
-        try:
-            msg = (
-                (await chat(message=self.merge(), model=self.model, temperature=0.8))
-                .choices[0]
-                .message.content
-            )
-            print(msg)
-            msg = msg.replace("[NULL]", "")
-        except Exception as ex:
-            self.msgs = [
-                RecordSeg(
-                    self.bot_name,
-                    self.bot_id,
-                    "求我屏蔽你？真是奇怪的癖好[block,抽象(194623),180]",
-                    0,
-                    datetime.now(),
-                )
-            ]
-            self.block_list = {}
-            return ["触发警告了，上下文莫得了哦。"]
-        msg = msg.replace(":", "：").split("：", maxsplit=1)[-1]
+        if _search:
+            return self.say()
 
         ret = []
         for i in (
