@@ -1,5 +1,6 @@
-from .duckduckgo import DuckDuckGo
 from .interface import SearchEngine
+from .duckduckgo import DuckDuckGo
+from .scp import SCP
 
 
 def get_searcher(searcher: str) -> SearchEngine:
@@ -8,4 +9,6 @@ def get_searcher(searcher: str) -> SearchEngine:
     """
     if searcher == "duckduckgo":
         return DuckDuckGo()
-    raise ValueError(f"Unknown searcher: {searcher}")
+    if searcher == "scp":
+        return SCP()
+    return None

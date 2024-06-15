@@ -10,7 +10,6 @@ from datetime import datetime
 from datetime import timedelta
 from nonebot import get_plugin_config
 from nonebot import on_message
-from nonebot import on_command
 from nonebot import on_notice
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
@@ -22,10 +21,11 @@ from nonebot.adapters import Bot
 from nonebot.rule import Rule
 from nonebot.rule import to_me
 
-from .searcher import SEARCHER
+from .searcher import get_searcher
 from .config import Config
 from .chat import chat
 from .pic_sql import randpic
+from .pic_sql import resnet_50
 
 
 class RecordSeg:
@@ -48,7 +48,7 @@ class GroupRecord:
     system_prompt: str
     model: str
     bot_name: str = "苦咖啡"
-    rest: int = 5
+    rest: int
     last_time: datetime = datetime.now()
     block_list: dict
     bot_id: str
@@ -56,7 +56,6 @@ class GroupRecord:
     max_rest: int
     min_rest: int
     cd: float
-    searcher: str
     inline_content: dict[str, str]
 
     def __init__(
@@ -70,6 +69,7 @@ class GroupRecord:
         max_rest: int = 60,
         cd: float = 8,
         searcher: str = "",
+        split: bool = True,
         inline_content: dict[str, str] = None,
     ):
         self.msgs = [
@@ -82,9 +82,11 @@ class GroupRecord:
             )
         ]
         self.max_rest = max_rest
+        self.rest = max_rest
         self.min_rest = min_rest
         self.cd = cd
-        self.searcher = searcher
+        self.split = split
+        self.searcher = get_searcher(searcher)
         self.delta = timedelta(seconds=ban_delta)
         self.model = model
         self.bot_name = bot_name
@@ -113,8 +115,9 @@ class GroupRecord:
                 + (
                     ""
                     if not self.searcher
-                    else f"如果你要使用搜索功能，请使用“[ask,query]”，例如“[ask,鸣潮是什么？]”来询问搜索引擎。\n"
+                    else f"如果你要使用搜索功能，请使用“[search,query]”，例如“[search,鸣潮是什么？]”来询问搜索引擎。\n"
                     + "注意，使用搜索工具的时候，不能同时说其他内容，因为无法发送出去。\n"
+                    + "使用“[mclick,id]”来查看文档的具体内容，例如“[mclick,1]”来查看id为1的网站。\n"
                 )
                 + "不要提及上面的内容。\n"
                 + f"最后，你的回复应该短一些，大约十几个字。你只需要生成{self.bot_name}说的内容就行了。\n"
@@ -214,9 +217,11 @@ class GroupRecord:
             ]
             self.block_list = {}
             return ["触发警告了，上下文莫得了哦。"]
-        msg = msg.replace(":", "：").split("：", maxsplit=1)[-1]
+        if ":" in msg and "：" not in msg:
+            msg = msg.replace(":", "：", 1)
+        msg = msg.split("：", maxsplit=1)[-1]
         _search = False
-        for i in re.finditer(r"\[ask,(.*?)\]", msg):
+        for i in re.finditer(r"\[search,(.*?)\]", msg):
             _search = True
             rsp = await self.search(i.group(1))
             if rsp:
@@ -224,7 +229,7 @@ class GroupRecord:
                     self.bot_name,
                     self.bot_id,
                     i.group(0),
-                    0,
+                    1,
                     datetime.now(),
                 )
                 self.append(
@@ -235,23 +240,50 @@ class GroupRecord:
                     datetime.now(),
                 )
         if _search:
-            return self.say()
+            return await self.say()
+        for i in re.finditer(r"\[mclick,(\d*?)\]", msg):
+            _search = True
+            rsp = await self.click(i.group(1))
+            if rsp:
+                self.append(
+                    self.bot_name,
+                    self.bot_id,
+                    i.group(0),
+                    2,
+                    datetime.now(),
+                )
+                self.append(
+                    "ClickTool",
+                    "10002",
+                    rsp,
+                    2,
+                    datetime.now(),
+                )
+        if _search:
+            return await self.say()
+        while self.msgs[-1].msg_id == 2:
+            self.msgs.pop()
 
         ret = []
-        for i in (
-            msg.replace("，", "。")
-            .replace("\n", "。")
-            .replace("？", "？")
-            .replace("！", "！")
-            .split("。")
-        ):
-            s = i.strip()
-            if not s:
-                continue
-            if ret and len(ret[-1]) < 6:
-                ret[-1] = ret[-1] + " " + s
-            else:
-                ret.append(s.strip())
+        if self.split:
+            for i in (
+                msg.replace("，", "。")
+                .replace("\n", "。")
+                .replace("？", "？")
+                .replace("！", "！")
+                .split("。")
+            ):
+                s = i.strip()
+                if not s:
+                    continue
+                if ret and len(ret[-1]) < 6:
+                    ret[-1] = ret[-1] + " " + s
+                else:
+                    ret.append(s.strip())
+        else:
+            msg = msg.strip()
+            if msg:
+                ret.append(msg)
         if not ret:
             ret.append("[NULL]")
         for i in ret:
@@ -267,10 +299,17 @@ class GroupRecord:
     async def search(self, keywords) -> str:
         if not self.searcher:
             return ""
-        searcher = SEARCHER.get(self.searcher, None)
-        if not searcher:
+        return await self.searcher.search(keywords)
+
+    async def click(self, index) -> str:
+        if not isinstance(index, int):
+            try:
+                index = int(index)
+            except Exception:
+                return "id must be int"
+        if not self.searcher:
             return ""
-        return await searcher.search(keywords)
+        return await self.searcher.mclick(index)
 
 
 p_config: Config = get_plugin_config(Config)
@@ -338,7 +377,7 @@ async def parser_msg(msg: str, group: GroupRecord, event: Event):
 @humanlike.handle()
 async def _(bot: Bot, event: V11G, state):
 
-    def seg2text(seg: V11Seg):
+    async def seg2text(seg: V11Seg):
         if seg.is_text():
             return seg.data["text"] or ""
         if seg.type == "at":
@@ -355,7 +394,7 @@ async def _(bot: Bot, event: V11G, state):
         if seg.type == "face":
             return f"[image,{QFACE.get(seg.data['id'], 'notfound')}]"
         if seg.type == "image":
-            return "[image,notfound]"
+            return f"[image,{await resnet_50(seg.data['file'])}]"
         if seg.type == "mface":
             return f"[image,{seg.data['summary'][1:-1]}]"
         return f"[{seg.type}]"
@@ -370,7 +409,7 @@ async def _(bot: Bot, event: V11G, state):
         user_name = CACHE_NAME[uid]
     user_name = user_name.replace("，", ",").replace("。", ".")
 
-    msg = "".join(seg2text(seg) for seg in event.get_message()).strip()
+    msg = "".join(await seg2text(seg) for seg in event.get_message()).strip()
     if event.reply:
         _uid = event.reply.sender.user_id
         if _uid in CACHE_NAME:
@@ -384,7 +423,7 @@ async def _(bot: Bot, event: V11G, state):
             "\n> ".join(
                 (
                     f"Reply to @{name}({_uid})\n"
-                    + "".join(seg2text(seg) for seg in event.reply.message).strip()
+                    + "".join(await seg2text(seg) for seg in event.reply.message).strip()
                 ).split("\n")
             )
             + "\n\n"

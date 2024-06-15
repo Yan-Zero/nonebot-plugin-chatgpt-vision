@@ -1,3 +1,4 @@
+import aiohttp
 from nonebot import get_driver
 from nonebot import get_plugin_config
 
@@ -130,7 +131,6 @@ if p_config.image_model == 0:
         await init_db()
 
 else:
-    import aiohttp
     import bs4
     import random
     from urllib.parse import quote
@@ -163,3 +163,26 @@ else:
                 url=images[random.randint(0, min(length - 1, 10))]["data-backup"],
             )
             return pic, "（随机检索）"
+
+
+async def resnet_50(url: str) -> str:
+    """图片分类"""
+    if not p_config.image_classification_url:
+        return "notfound"
+    if not p_config.image_classification_id:
+        return "notfound"
+    if not p_config.image_classification_key:
+        return "notfound"
+    async with aiohttp.ClientSession(
+        headers={"Authorization": f"Bearer {p_config.image_classification_key}"}
+    ) as session:
+        rsp = await session.post(
+            p_config.image_classification_url,
+            json={"account_id": p_config.image_classification_id, "image_url": url},
+        )
+        if rsp.status != 200:
+            return "notfound"
+        data = await rsp.json()
+        if not data.get("success"):
+            return "notfound"
+        return data["result"][0]["label"]

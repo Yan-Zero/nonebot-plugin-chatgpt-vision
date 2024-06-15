@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nonebot-plugin-chatgpt-vision"
-version = "0.4.0"
+version = "0.4.1"
 description = ""
 authors = ["Yan <1964649083@qq.com>"]
 license = "Apache License 2.0"
@@ -20,6 +20,7 @@ beautifulsoup4 = "^4.12.3"
 duckduckgo-search = "^6.1.6"
 kor = "^1.0.1"
 langchain-community = "^0.2.5"
+html2text = "^2024.2.26"
 
 
 [build-system]

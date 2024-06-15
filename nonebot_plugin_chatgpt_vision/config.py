@@ -36,3 +36,7 @@ class Config(BaseModel):
     notfound_with_jpg: bool = True
 
     image_model: int = 1
+
+    image_classification_url: str = ""
+    image_classification_key: str = ""
+    image_classification_id: str = ""

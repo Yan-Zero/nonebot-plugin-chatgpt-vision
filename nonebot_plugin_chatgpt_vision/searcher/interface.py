@@ -1,15 +1,15 @@
 class SearchEngine:
-    def __init__(self, name: str):
+    def __init__(self, name: str, **kwargs):
         self.name = name
 
-    def search(self, query: str) -> str:
+    async def search(self, query: str, **kwargs) -> str:
         """
-        搜索并返回结果列表
+        异步搜索并返回结果列表
         """
         raise NotImplementedError
 
-    async def search_async(self, query: str) -> str:
+    async def mclick(self, index: str, **kwargs) -> str:
         """
-        异步搜索并返回结果列表
+        异步点击并返回结果
         """
         raise NotImplementedError
