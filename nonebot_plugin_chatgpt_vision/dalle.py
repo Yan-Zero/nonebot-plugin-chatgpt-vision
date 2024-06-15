@@ -19,7 +19,7 @@ from nonebot.permission import SUPERUSER
 from openai import RateLimitError
 from openai import BadRequestError
 
-from .chat import POOL
+from .chat import draw_image
 from .chat import chat
 from .config import Config
 from .misc import send_image_as_base64
@@ -94,18 +94,6 @@ async def _(event: MessageEvent):
             await dell_llm.finish(
                 "已开启中间 LLM" if DALLEPromptState else "已关闭中间 LLM"
             )
-
-
-async def draw_image(model: str, prompt: str, size=Size.LARGE.value, times: int = 3):
-    for _ in range(times - 1):
-        cilent = POOL(model=model)
-        try:
-            return await cilent.images.generate(model=model, prompt=prompt, size=size)
-        except RateLimitError:
-            POOL.RequestLimit(model=model, cilent=cilent, timeout=120)
-    return await POOL(model=model).images.generate(
-        model=model, prompt=prompt, size=size
-    )
 
 
 async def draw_sd(
@@ -305,8 +293,6 @@ Your respone shouldn't be in a code block.""",
                 allow_unicode=True,
                 width=1000,
             )
-            with open("./t", "w+") as f:
-                f.write(t)
             rsp = (
                 (
                     await chat(
@@ -323,8 +309,6 @@ Your respone shouldn't be in a code block.""",
                     rsp = rsp[4:]
 
         try:
-            with open("./a", "w+") as f:
-                f.write(rsp)
             rsp = yaml.safe_load(rsp)
         except Exception:
             rsp = {

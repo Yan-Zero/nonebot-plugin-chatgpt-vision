@@ -13,17 +13,15 @@ from nonebot.params import CommandArg
 from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
 
-from .chat import POOL
-from .chat import chat
 
 superusers = get_driver().config.superusers
-read = on_command(
-    "read",
-    rule=to_me(),
-    priority=5,
-    force_whitespace=True,
-    block=True,
-)
+# read = on_command(
+#     "read",
+#     rule=to_me(),
+#     priority=5,
+#     force_whitespace=True,
+#     block=True,
+# )
 
 
 async def send_image_as_base64(url: str):
@@ -36,19 +34,19 @@ async def send_image_as_base64(url: str):
                 return None
 
 
-@read.handle()
-async def _(event: MessageEvent, args=CommandArg()):
-    if isinstance(event, PrivateMessageEvent) and str(event.user_id) not in superusers:
-        await read.finish("私聊无法使用此功能")
-    if isinstance(event, V11GME):
-        if not event.reply:
-            await read.finish("请先回复一条消息")
-        try:
-            rsp = await POOL("tts-1-hd").audio.speech.create(
-                model="tts-1-hd",
-                voice="onyx",
-                input=event.reply.message.extract_plain_text(),
-            )
-            await read.send(V11Seg.record(await rsp.aread()))
-        except Exception as ex:
-            await read.finish(f"发生错误: {ex}")
+# @read.handle()
+# async def _(event: MessageEvent, args=CommandArg()):
+#     if isinstance(event, PrivateMessageEvent) and str(event.user_id) not in superusers:
+#         await read.finish("私聊无法使用此功能")
+#     if isinstance(event, V11GME):
+#         if not event.reply:
+#             await read.finish("请先回复一条消息")
+#         try:
+#             rsp = await POOL("tts-1-hd").audio.speech.create(
+#                 model="tts-1-hd",
+#                 voice="onyx",
+#                 input=event.reply.message.extract_plain_text(),
+#             )
+#             await read.send(V11Seg.record(await rsp.aread()))
+#         except Exception as ex:
+#             await read.finish(f"发生错误: {ex}")

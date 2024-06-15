@@ -17,16 +17,12 @@ class Config(BaseModel):
     max_history_tokens: int = 3000
     """ 历史记录最大 tokens（只包括 User） """
 
-    openai_pool_model_config: list[str] = []
-    openai_pool_key_config: list[str] = []
-    openai_pool_baseurl_config: list[str] = []
-
     dashscope_embedding_apikey: str = ""
     dashscope_embedding_baseurl: str = ""
 
     human_like_chat: bool = False
     human_like_max_tokens: int = 6000
-    human_like_max_log: int = 40
+    human_like_max_log: int = 60
     human_like_group: list[str] = []
 
     sd_url: str = (
