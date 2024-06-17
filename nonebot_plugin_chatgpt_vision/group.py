@@ -1,4 +1,5 @@
 import re
+import bisect
 import pathlib
 import asyncio
 import json
@@ -21,6 +22,31 @@ try:
         QFACE = json.load(f)
 except Exception:
     QFACE = {}
+
+
+async def seg2text(seg: V11Seg):
+    if seg.is_text():
+        return seg.data["text"] or ""
+    if seg.type == "at":
+        if seg.data["qq"] in CACHE_NAME:
+            name = CACHE_NAME[seg.data["qq"]]
+        elif "name" in seg.data:
+            name = seg.data["name"]
+            if not name or not name.strip():
+                name = str(seg.data["qq"])[:5]
+            CACHE_NAME[seg.data["qq"]] = name
+        else:
+            name = str(seg.data["qq"])[:5]
+        return f"@{name}({seg.data['qq']}) "
+    if seg.type == "face":
+        return f"[image,{QFACE.get(seg.data['id'], 'notfound')}]"
+    if seg.type == "image":
+        return f"[image,{await resnet_50(seg.data['file'])}]"
+    if seg.type == "mface":
+        return f"[image,{seg.data['summary'][1:-1]}]"
+    if seg.type == "record":
+        return "[record]"
+    return f"[{seg.type}]"
 
 
 class RecordSeg:
@@ -51,30 +77,6 @@ class RecordSeg:
         return f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n{self.msg.extract_plain_text()}"
 
     async def fetch(self) -> None:
-        async def seg2text(seg: V11Seg):
-            if seg.is_text():
-                return seg.data["text"] or ""
-            if seg.type == "at":
-                if seg.data["qq"] in CACHE_NAME:
-                    name = CACHE_NAME[seg.data["qq"]]
-                elif "name" in seg.data:
-                    name = seg.data["name"]
-                    if not name or not name.strip():
-                        name = str(seg.data["qq"])[:5]
-                    CACHE_NAME[seg.data["qq"]] = name
-                else:
-                    name = str(seg.data["qq"])[:5]
-                return f"@{name}({seg.data['qq']}) "
-            if seg.type == "face":
-                return f"[image,{QFACE.get(seg.data['id'], 'notfound')}]"
-            if seg.type == "image":
-                return f"[image,{await resnet_50(seg.data['file'])}]"
-            if seg.type == "mface":
-                return f"[image,{seg.data['summary'][1:-1]}]"
-            if seg.type == "record":
-                return "[record]"
-            return f"[{seg.type}]"
-
         temp = V11Msg()
         for seg in self.msg:
             temp.append(await seg2text(seg))
@@ -174,7 +176,11 @@ class GroupRecord:
             return
         if msg == "[NULL]":
             return
-        self.msgs.append(RecordSeg(user_name, user_id, msg, msg_id, time))
+        bisect.insort(
+            self.msgs,
+            RecordSeg(user_name, user_id, msg, msg_id, time),
+            key=lambda x: x.time,
+        )
         await self.msgs[-1].fetch()
         if len(self.msgs) > p_config.human_like_max_log:
             self.msgs.pop(0)

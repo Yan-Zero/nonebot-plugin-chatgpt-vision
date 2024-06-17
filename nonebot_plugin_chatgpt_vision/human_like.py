@@ -24,6 +24,7 @@ from .config import Config
 from .picsql import randpic
 from .group import GroupRecord
 from .group import CACHE_NAME
+from .group import seg2text
 
 p_config: Config = get_plugin_config(Config)
 _CONFIG = None
@@ -98,32 +99,28 @@ async def _(bot: Bot, event: V11G, state):
     user_name = user_name.replace("，", ",").replace("。", ".")
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
 
-    # for seg in event.get_message():
-    #     msg += await seg2text(seg)
-    # msg = msg.strip()
-    # if event.reply:
-    #     _uid = event.reply.sender.user_id
-    #     if _uid in CACHE_NAME:
-    #         name = CACHE_NAME[_uid]
-    #     else:
-    #         name = event.reply.sender.nickname
-    #         if not name or not name.strip():
-    #             name = str(_uid)[:5]
-    #         CACHE_NAME[_uid] = name
-    #     temp = ""
-    #     for seg in event.reply.message:
-    #         temp += await seg2text(seg)
-    #     temp = temp.strip()
-    #     msg = (
-    #         "\n> ".join((f"Reply to @{name}({_uid})\n" + temp).split("\n"))
-    #         + "\n\n"
-    #         + msg
-    #     )
     msg = event.message
+    if event.reply:
+        _uid = event.reply.sender.user_id
+        if _uid in CACHE_NAME:
+            name = CACHE_NAME[_uid]
+        else:
+            name = event.reply.sender.nickname
+            if not name or not name.strip():
+                name = str(_uid)[:5]
+            CACHE_NAME[_uid] = name
+        temp = ""
+        for seg in event.reply.message:
+            temp += await seg2text(seg)
+        temp = temp.strip()
+        msg = (
+            "\n> ".join((f"Reply to @{name}({_uid})\n" + temp).split("\n"))
+            + "\n\n"
+            + msg
+        )
     if await to_me()(bot=bot, event=event, state=state):
         msg += V11Seg.at(group.bot_id)
     await group.append(user_name, uid, msg, event.message_id, datetime.now())
-
     if group.check(uid, datetime.now()):
         return
     if group.last_time + timedelta(seconds=group.cd) > datetime.now():
