@@ -122,7 +122,7 @@ async def _(bot: Bot, event: V11G, state):
     msg = event.message
     if await to_me()(bot=bot, event=event, state=state):
         msg += V11Seg.at(group.bot_id)
-    group.append(user_name, uid, msg, event.message_id, datetime.now())
+    await group.append(user_name, uid, msg, event.message_id, datetime.now())
 
     if group.check(uid, datetime.now()):
         return
@@ -202,7 +202,7 @@ async def _(bot: V11Bot, event: NoticeEvent):
         group.recall(event.message_id)
     else:
         msg = f"{name}({uid}) 发生了{event.notice_type}"
-    group.append("GroupNotice", "10000", msg, 0, datetime.now())
+    await group.append("GroupNotice", "10000", msg, 0, datetime.now())
 
     group.rest -= 1
     if group.rest > 0:

@@ -4,6 +4,7 @@ from nonebot import get_driver
 from nonebot import get_plugin_config
 
 from .config import Config
+from .config import PicData
 
 p_config = get_plugin_config(Config)
 gdriver = get_driver()
@@ -18,7 +19,6 @@ if p_config.image_mode == 0:
     from sqlalchemy.ext.asyncio.session import AsyncSession
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import select
-    from .config import PicData
 
     _async_database = None
     _async_embedding_database = None

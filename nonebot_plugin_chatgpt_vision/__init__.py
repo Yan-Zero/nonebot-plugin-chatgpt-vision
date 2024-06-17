@@ -20,8 +20,8 @@ from nonebot.permission import SUPERUSER
 from .config import Config
 from .chat import chat
 from .userrd import UserRD
-from plugin.dalle import DALLESwitchState
-from plugin.misc import send_image_as_base64
+from .plugin.dalle import DALLESwitchState
+from .plugin.misc import send_image_as_base64
 from .human_like import GroupRecord
 
 __plugin_meta__ = PluginMetadata(

@@ -12,7 +12,6 @@ from .searcher import get_searcher
 from .config import Config
 from .chat import chat
 from .picsql import resnet_50
-from .group import RecordSeg
 
 CACHE_NAME: dict = {}
 QFACE = None
@@ -269,14 +268,14 @@ class GroupRecord:
             _search = True
             rsp = await self.search(i.group(1))
             if rsp:
-                self.append(
+                await self.append(
                     self.bot_name,
                     self.bot_id,
                     i.group(0),
                     1,
                     datetime.now(),
                 )
-                self.append(
+                await self.append(
                     "SearchTool",
                     "10001",
                     rsp,
@@ -289,14 +288,14 @@ class GroupRecord:
             _search = True
             rsp = await self.click(i.group(1))
             if rsp:
-                self.append(
+                await self.append(
                     self.bot_name,
                     self.bot_id,
                     i.group(0),
                     2,
                     datetime.now(),
                 )
-                self.append(
+                await self.append(
                     "ClickTool",
                     "10002",
                     rsp,
@@ -327,7 +326,7 @@ class GroupRecord:
         if not ret:
             ret.append("[NULL]")
         for i in ret:
-            self.append(
+            await self.append(
                 self.bot_name,
                 self.bot_id,
                 i,
