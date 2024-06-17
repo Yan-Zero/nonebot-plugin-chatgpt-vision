@@ -17,11 +17,11 @@ from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11GME
 from nonebot.permission import SUPERUSER
 
-from .misc import send_image_as_base64
 from .config import Config
 from .chat import chat
 from .userrd import UserRD
-from .dalle import DALLESwitchState
+from plugin.dalle import DALLESwitchState
+from plugin.misc import send_image_as_base64
 from .human_like import GroupRecord
 
 __plugin_meta__ = PluginMetadata(

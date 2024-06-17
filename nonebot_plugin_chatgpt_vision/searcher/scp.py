@@ -13,15 +13,14 @@ class SCP(DuckDuckGo):
         self.name = "scp"
 
     async def search(self, query: str, **kwargs) -> str:
-        return await super().search(query + " site:scp-wiki-cn.wikidot.com", **kwargs)
+        return await super().search(
+            query + " -spc site:scp-wiki-cn.wikidot.com", **kwargs
+        )
 
     async def mclick(self, index: str, **kwargs) -> str:
         if index > len(self.output) or index < 1:
             return "Index out of range"
-        url = self.output[index - 1]["href"]
         async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
+            async with session.get(self.output[index - 1]["href"]) as response:
                 soup = bs4.BeautifulSoup(await response.text(), "html.parser")
-                with open("./a", mode="w+") as f:
-                    f.write(str(soup))
                 return self.converter.handle(str(soup.find("div", id="page-content")))

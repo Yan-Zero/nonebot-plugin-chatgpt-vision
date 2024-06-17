@@ -19,9 +19,9 @@ from nonebot.permission import SUPERUSER
 from openai import RateLimitError
 from openai import BadRequestError
 
-from .chat import draw_image
-from .chat import chat
-from .config import Config
+from ..chat import draw_image
+from ..chat import chat
+from ..config import Config
 from .misc import send_image_as_base64
 
 

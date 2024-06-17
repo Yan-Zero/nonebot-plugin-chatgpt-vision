@@ -9,7 +9,7 @@ p_config = get_plugin_config(Config)
 gdriver = get_driver()
 
 
-if p_config.image_model == 0:
+if p_config.image_mode == 0:
     import dashscope
     import asyncpg
     import sqlalchemy as sa
@@ -18,7 +18,7 @@ if p_config.image_model == 0:
     from sqlalchemy.ext.asyncio.session import AsyncSession
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy import select
-    from .model import PicData
+    from .config import PicData
 
     _async_database = None
     _async_embedding_database = None
@@ -172,11 +172,7 @@ async def resnet_50(url: str) -> str:
         return "notfound"
     if not p_config.image_classification_id:
         return "notfound"
-    if not p_config.image_classification_key:
-        return "notfound"
-    async with aiohttp.ClientSession(
-        headers={"Authorization": f"Bearer {p_config.image_classification_key}"}
-    ) as session:
+    async with aiohttp.ClientSession() as session:
         rsp = await session.post(
             p_config.image_classification_url,
             json={"account_id": p_config.image_classification_id, "image_url": url},

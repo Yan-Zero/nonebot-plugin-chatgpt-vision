@@ -1,4 +1,10 @@
 from pydantic import BaseModel
+from sqlalchemy import TEXT
+from sqlalchemy import BOOLEAN
+from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.ext.declarative import declarative_base
+
+Model = declarative_base(name="Model")
 
 
 class Config(BaseModel):
@@ -35,8 +41,24 @@ class Config(BaseModel):
     dashscope_api: str
     notfound_with_jpg: bool = True
 
-    image_model: int = 1
-
+    image_mode: int = 1
     image_classification_url: str = ""
-    image_classification_key: str = ""
     image_classification_id: str = ""
+
+
+class PicData(Model):
+    """消息记录"""
+
+    __tablename__ = "picdata"
+
+    __table_args__ = {"extend_existing": True}
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(TEXT)
+    """ 图片名称 """
+    group: Mapped[str] = mapped_column(TEXT)
+    """ 所属群组 id """
+    url: Mapped[str] = mapped_column(TEXT)
+    """ 图片目录 """
+    u_vec_img: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
+    u_vec_text: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
