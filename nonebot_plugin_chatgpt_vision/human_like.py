@@ -9,6 +9,7 @@ from datetime import datetime
 from datetime import timedelta
 from nonebot import get_plugin_config
 from nonebot import on_message
+from nonebot import on_command
 from nonebot import on_notice
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
@@ -19,6 +20,7 @@ from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from nonebot.adapters import Bot
 from nonebot.rule import Rule
 from nonebot.rule import to_me
+from nonebot.permission import SUPERUSER
 
 from .config import Config
 from .picsql import randpic
@@ -123,6 +125,8 @@ async def _(bot: Bot, event: V11G, state):
     await group.append(user_name, uid, msg, event.message_id, datetime.now())
     if group.check(uid, datetime.now()):
         return
+    if group.lock.locked():
+        return
     if group.last_time + timedelta(seconds=group.cd) > datetime.now():
         return True
     if event.message.extract_plain_text().startswith("/"):
@@ -217,3 +221,22 @@ async def _(bot: V11Bot, event: NoticeEvent):
             await human_notion.send(V11Msg(s))
     except Exception as ex:
         print(ex)
+
+
+remake = on_command(
+    "remake",
+    rule=to_me(),
+    permission=SUPERUSER,
+    priority=5,
+    force_whitespace=True,
+    block=True,
+)
+
+
+@remake.handle()
+async def _(bot: Bot, event: V11G, state):
+    group: GroupRecord = GROUP_RECORD[str(event.group_id)]
+    async with group.lock:
+        group.rest = random.randint(group.min_rest, group.max_rest)
+        group.remake()
+        await remake.finish("已重置")
