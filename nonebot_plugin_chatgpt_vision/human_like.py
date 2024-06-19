@@ -25,6 +25,7 @@ from nonebot.permission import SUPERUSER
 from .config import Config
 from .picsql import randpic
 from .group import GroupRecord
+from .group import RecordSeg
 from .group import CACHE_NAME
 from .group import seg2text
 
@@ -102,27 +103,22 @@ async def _(bot: Bot, event: V11G, state):
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
 
     msg = event.message
+    reply = None
     if event.reply:
-        _uid = event.reply.sender.user_id
-        if _uid in CACHE_NAME:
-            name = CACHE_NAME[_uid]
-        else:
-            name = event.reply.sender.nickname
-            if not name or not name.strip():
-                name = str(_uid)[:5]
-            CACHE_NAME[_uid] = name
-        temp = ""
-        for seg in event.reply.message:
-            temp += await seg2text(seg)
-        temp = temp.strip()
-        msg = (
-            "\n> ".join((f"Reply to @{name}({_uid})\n" + temp).split("\n"))
-            + "\n\n"
-            + msg
+        reply = RecordSeg(
+            name=event.reply.sender.nickname,
+            uid=event.reply.sender.user_id,
+            msg=event.reply.message,
+            msg_id=event.reply.message_id,
         )
-    if await to_me()(bot=bot, event=event, state=state):
+    if (
+        await to_me()(bot=bot, event=event, state=state)
+        and not event.message.to_rich_text().strip()
+    ):
         msg += V11Seg.at(group.bot_id)
-    await group.append(user_name, uid, msg, event.message_id, datetime.now())
+    await group.append(
+        user_name, uid, msg, event.message_id, datetime.now(), reply=reply
+    )
     if group.check(uid, datetime.now()):
         return
     if group.lock.locked():

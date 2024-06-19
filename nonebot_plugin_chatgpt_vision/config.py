@@ -45,6 +45,10 @@ class Config(BaseModel):
     image_classification_url: str = ""
     image_classification_id: str = ""
 
+    image_cdn_url: str = ""
+    image_cdn_key: str = ""
+    image_cdn_put_url: str = ""
+
 
 class PicData(Model):
     """消息记录"""

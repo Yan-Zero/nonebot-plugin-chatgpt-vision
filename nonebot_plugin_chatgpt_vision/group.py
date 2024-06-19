@@ -13,6 +13,7 @@ from .searcher import get_searcher
 from .config import Config
 from .chat import chat
 from .picsql import resnet_50
+from .picsql import upload_image
 
 CACHE_NAME: dict = {}
 QFACE = None
@@ -24,7 +25,7 @@ except Exception:
     QFACE = {}
 
 
-async def seg2text(seg: V11Seg):
+async def seg2text(seg: V11Seg, image_count: int = 0):
     if seg.is_text():
         return seg.data["text"] or ""
     if seg.type == "at":
@@ -41,7 +42,10 @@ async def seg2text(seg: V11Seg):
     if seg.type == "face":
         return f"[image,{QFACE.get(seg.data['id'], 'notfound')}]"
     if seg.type == "image":
-        return f"[image,{await resnet_50(seg.data['file'])}]"
+        if not p_config.image_cdn_url:
+            return f"[image,{await resnet_50(seg.data['file'])}]"
+        else:
+            return f"[image,{seg.data['file']}]"
     if seg.type == "mface":
         return f"[image,{seg.data['summary'][1:-1]}]"
     if seg.type == "record":
@@ -55,7 +59,9 @@ class RecordSeg:
     msg: V11Msg
     time: datetime
     msg_id: int
-    reply: V11Msg
+
+    reply: "RecordSeg"
+    images: list[str]
 
     def __init__(
         self,
@@ -64,6 +70,8 @@ class RecordSeg:
         msg: V11Msg | str,
         msg_id: int,
         time: datetime,
+        images: list[str] = None,
+        reply: "RecordSeg" = None,
     ):
         self.name = name
         self.uid = id
@@ -72,13 +80,51 @@ class RecordSeg:
         self.msg = msg
         self.time = time
         self.msg_id = msg_id
+        if images:
+            self.images = images
+        else:
+            self.images = []
+        self.reply = reply
 
-    def __str__(self) -> str:
-        return f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n{self.msg.extract_plain_text()}"
+    def __str__(self):
+        ret = f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n"
+        if self.reply:
+            ret += "Reply to @" + self.reply.name + "(" + self.reply.uid + ")\n"
+            ret += "\n> ".join(str(self.reply).split("\n")[1:])
+        return ret + f"{self.msg.extract_plain_text()}"
+
+    def content(self) -> list:
+        ret = [
+            {
+                "type": "text",
+                "text": str(self),
+            }
+        ]
+        if not self.images:
+            return ret
+        for i in self.images:
+            ret.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": i,
+                    },
+                }
+            )
+        return ret
 
     async def fetch(self) -> None:
+        if self.reply:
+            await self.reply.fetch()
+            if self.reply.images:
+                self.images.extend(self.reply.images)
+
         temp = V11Msg()
         for seg in self.msg:
+            if seg.type == "image":
+                url = await upload_image(seg.data["file"])
+                seg.data["file"] = url
+                self.images.append(url)
             temp.append(await seg2text(seg))
         self.msg = temp
 
@@ -168,7 +214,13 @@ class GroupRecord:
         self.maxlog = max_logs
 
     async def append(
-        self, user_name: str, user_id: str, msg: V11Msg, msg_id: int, time: datetime
+        self,
+        user_name: str,
+        user_id: str,
+        msg: V11Msg,
+        msg_id: int,
+        time: datetime,
+        reply: RecordSeg = None,
     ):
         if self.check(user_id, time):
             return
@@ -176,7 +228,7 @@ class GroupRecord:
             return
         bisect.insort(
             self.msgs,
-            RecordSeg(user_name, user_id, msg, msg_id, time),
+            RecordSeg(user_name, user_id, msg, msg_id, time, reply=reply),
             key=lambda x: x.time,
         )
         await self.msgs[-1].fetch()
@@ -218,7 +270,7 @@ class GroupRecord:
         return False
 
     def merge(self) -> list[dict]:
-        temp = []
+        temp: list[RecordSeg] = []
         split = self.split[-1] + "\n" if self.split else "\n"
         for seg in self.msgs:
             if not temp:
@@ -229,17 +281,25 @@ class GroupRecord:
                         seg.msg,
                         seg.msg_id,
                         seg.time,
+                        seg.images,
                     )
                 )
                 continue
             if seg.name == temp[-1].name and seg.uid == temp[-1].uid:
                 temp[-1].msg += split + seg.msg
+                temp[-1].images += seg.images
             else:
-                temp.append(RecordSeg(seg.name, seg.uid, seg.msg, seg.msg_id, seg.time))
+                temp.append(
+                    RecordSeg(
+                        seg.name, seg.uid, seg.msg, seg.msg_id, seg.time, seg.images
+                    )
+                )
+        for seg in self.msgs[:-3]:
+            seg.images = []
         return [{"role": "system", "content": self.system_prompt}] + [
             {
                 "role": "user" if seg.uid != self.bot_id else "assistant",
-                "content": str(seg),
+                "content": seg.content(),
             }
             for seg in temp
         ]
