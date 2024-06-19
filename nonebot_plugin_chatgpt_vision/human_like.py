@@ -147,9 +147,7 @@ async def _(bot: Bot, event: V11G, state):
         for s in await group.say():
             if s == "[NULL]":
                 continue
-            await asyncio.sleep(len(s) / 100)
-            s = await parser_msg(s, group, event)
-            await humanlike.send(V11Msg(s))
+            await humanlike.send(V11Msg(await parser_msg(s, group, event)))
     except Exception as ex:
         print(ex)
 

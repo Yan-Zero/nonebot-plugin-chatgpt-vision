@@ -97,6 +97,7 @@ class GroupRecord:
     min_rest: int
     cd: float
     inline_content: dict[str, str]
+    maxlog: int
 
     lock: asyncio.Lock
 
@@ -113,6 +114,8 @@ class GroupRecord:
         searcher: str = "",
         split: list = None,
         inline_content: dict[str, str] = None,
+        max_logs: int = p_config.human_like_max_log,
+        **kwargs,
     ):
         self.max_rest = max_rest
         self.rest = max_rest
@@ -162,6 +165,7 @@ class GroupRecord:
             )
         self.remake()
         self.lock = asyncio.Lock()
+        self.maxlog = max_logs
 
     async def append(
         self, user_name: str, user_id: str, msg: V11Msg, msg_id: int, time: datetime
@@ -176,7 +180,7 @@ class GroupRecord:
             key=lambda x: x.time,
         )
         await self.msgs[-1].fetch()
-        if len(self.msgs) > p_config.human_like_max_log:
+        if len(self.msgs) > self.maxlog:
             self.msgs.pop(0)
 
     def block(self, id: str, delta: float = None):
@@ -258,7 +262,10 @@ class GroupRecord:
                 msg = (
                     (
                         await chat(
-                            message=self.merge(), model=self.model, temperature=0.8
+                            message=self.merge(),
+                            model=self.model,
+                            temperature=0.8,
+                            max_tokens=1000,
                         )
                     )
                     .choices[0]
@@ -325,10 +332,12 @@ class GroupRecord:
                     s = i.strip()
                     if not s:
                         continue
+                    if ret and ret[-1] == s:
+                        continue
                     if ret and len(ret[-1]) < 6:
                         ret[-1] = ret[-1] + " " + s
                     else:
-                        ret.append(s.strip())
+                        ret.append(s)
             else:
                 msg = msg.strip()
                 if msg:

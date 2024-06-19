@@ -37,6 +37,12 @@ class DuckDuckGo(SearchEngine):
     async def mclick(self, index: str, **kwargs) -> str:
         if index < 1 or index > len(self.output):
             return "Index out of range"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(self.output[index - 1]["href"]) as response:
-                return self.converter.handle(await response.text())
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    self.output[index - 1]["href"],
+                    timeout=15,
+                ) as response:
+                    return self.converter.handle(await response.text())
+        except Exception as e:
+            return "Maybe the link is limited.\nError: " + str(e)

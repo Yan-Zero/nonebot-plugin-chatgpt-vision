@@ -17,7 +17,9 @@ except Exception as ex:
     pass
 
 
-async def chat(message: list, model: str, times: int = 3, temperature: int = 0.65):
+async def chat(
+    message: list, model: str, times: int = 3, temperature: int = 0.65, **kwargs
+):
     """
     Chat with ChatGPT
 
@@ -34,7 +36,7 @@ async def chat(message: list, model: str, times: int = 3, temperature: int = 0.6
         raise ValueError(f"The model {model} is not supported.")
     try:
         rsp = await AsyncOpenAI(**OPENAI_CONFIG[model]).chat.completions.create(
-            messages=message, model=model, temperature=temperature
+            messages=message, model=model, temperature=temperature, **kwargs
         )
         if not rsp:
             raise ValueError("The Response is Null.")
@@ -45,9 +47,11 @@ async def chat(message: list, model: str, times: int = 3, temperature: int = 0.6
         pass
 
 
-async def draw_image(model: str, prompt: str, size: str = "1024x1024", times: int = 3):
+async def draw_image(
+    model: str, prompt: str, size: str = "1024x1024", times: int = 3, **kwargs
+):
     if model not in OPENAI_CONFIG:
         raise ValueError(f"The model {model} is not supported.")
     return await AsyncOpenAI(**OPENAI_CONFIG[model]).images.generate(
-        model=model, prompt=prompt, size=size
+        model=model, prompt=prompt, size=size, **kwargs
     )
