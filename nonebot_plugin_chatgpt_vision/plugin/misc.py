@@ -13,7 +13,7 @@ from nonebot.params import CommandArg
 from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
 
-from ..chat import OPENAI_CONFIG
+from ..chat import OPENAI_CONFIG, error_chat
 from ..chat import AsyncOpenAI
 
 superusers = get_driver().config.superusers
@@ -41,4 +41,4 @@ async def _(event: MessageEvent, args=CommandArg()):
             )
             await read.send(V11Seg.record(await rsp.aread()))
         except Exception as ex:
-            await read.finish(f"发生错误: {ex}")
+            await read.finish(f"错误了。{await error_chat(ex)}")

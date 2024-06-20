@@ -21,6 +21,7 @@ from openai import BadRequestError
 
 from ..chat import draw_image
 from ..chat import chat
+from ..chat import error_chat
 from ..config import Config
 
 
@@ -207,7 +208,7 @@ The generated prompt sent to dalle should be very detailed, and around 100 words
     except BadRequestError as bd:
         error = str(bd.message)
     except Exception as ex:
-        error = str(ex)
+        error = await error_chat(ex)
     finally:
         async with drawing_users_lock:
             del drawing_users[user_id]
@@ -316,7 +317,7 @@ Your respone shouldn't be in a code block.""",
     except BadRequestError as bd:
         error = str(bd.message)
     except Exception as ex:
-        error = str(ex)
+        error = await error_chat(ex)
     finally:
         async with drawing_users_lock:
             del drawing_users[user_id]

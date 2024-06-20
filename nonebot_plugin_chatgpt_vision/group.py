@@ -12,6 +12,7 @@ from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from .searcher import get_searcher
 from .config import Config
 from .chat import chat
+from .chat import error_chat
 from .picsql import resnet_50
 from .picsql import upload_image
 
@@ -42,8 +43,12 @@ async def seg2text(seg: V11Seg):
     if seg.type == "face":
         return f"[image,{QFACE.get(seg.data['id'], 'notfound')}]"
     if seg.type == "image":
+        if p_config.chat_with_image:
+            return f""
         return f"[image,{await resnet_50(seg.data['file'])}]"
     if seg.type == "mface":
+        if p_config.chat_with_image:
+            return f""
         return f"[image,{seg.data['summary'][1:-1]}]"
     if seg.type == "record":
         return "[record]"
@@ -63,7 +68,7 @@ class RecordSeg:
     def __init__(
         self,
         name: str,
-        id: str,
+        uid: str,
         msg: V11Msg | str,
         msg_id: int,
         time: datetime,
@@ -71,7 +76,7 @@ class RecordSeg:
         reply: "RecordSeg" = None,
     ):
         self.name = name
-        self.uid = id
+        self.uid = uid
         if isinstance(msg, str):
             msg = V11Msg(msg)
         self.msg = msg
@@ -86,21 +91,28 @@ class RecordSeg:
             print(self.reply.uid)
 
     def __str__(self):
+        return self.to_str(with_title=True)
+
+    def to_str(self, with_title: bool = False):
         ret = ""
+        if with_title:
+            ret += f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n"
         if self.reply:
             ret += f"Reply to @{self.reply.name}({self.reply.uid})：\n"
-            ret += "\n> ".join(str(self.reply).split("\n")[1:]) + "\n"
-        return f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n{ret}{self.msg.extract_plain_text()}"
+            ret += "\n> ".join(self.reply.to_str().split("\n")) + "\n"
+        return ret + self.msg.extract_plain_text()
 
-    def content(self) -> list:
+    def content(self, with_title: bool = False) -> list:
+        if not p_config.chat_with_image:
+            return self.to_str(with_title)
+        if not self.images:
+            return self.to_str(with_title)
         ret = [
             {
                 "type": "text",
-                "text": str(self),
+                "text": self.to_str(with_title),
             }
         ]
-        if not self.images:
-            return ret
         for i in self.images:
             ret.append(
                 {
@@ -123,6 +135,10 @@ class RecordSeg:
             if seg.type == "image":
                 url = await upload_image(seg.data["file"])
                 seg.data["file"] = url
+                self.images.append(url)
+            if seg.type == "mface":
+                url = await upload_image(seg.data["url"])
+                seg.data["url"] = url
                 self.images.append(url)
             temp.append(await seg2text(seg))
         self.msg = temp
@@ -345,8 +361,7 @@ class GroupRecord:
                 msg = msg.replace("[NULL]", "")
             except Exception as ex:
                 self.remake()
-                print(ex)
-                return ["触发警告了，上下文莫得了哦。"]
+                return [await error_chat(ex) + "上下文莫得了哦。"]
 
             if "]:" in msg and "]：" not in msg:
                 msg = msg.replace("]:", "]：", 1)

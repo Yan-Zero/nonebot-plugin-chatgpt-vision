@@ -49,6 +49,8 @@ class Config(BaseModel):
     image_cdn_key: str = ""
     image_cdn_put_url: str = ""
 
+    chat_with_image: bool = False
+
 
 class PicData(Model):
     """消息记录"""
