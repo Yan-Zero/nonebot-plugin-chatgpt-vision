@@ -325,7 +325,7 @@ class GroupRecord:
         return [{"role": "system", "content": self.system_prompt}] + [
             {
                 "role": "user" if seg.uid != self.bot_id else "assistant",
-                "content": seg.content(),
+                "content": seg.content(with_title=True),
             }
             for seg in temp
         ]

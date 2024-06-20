@@ -171,17 +171,20 @@ async def _(bot: Bot, event: Event, args: V11M = CommandArg()):
         if isinstance(content, list):
             return "".join([to_str(i) for i in content])
 
+    _chat = RecordSeg(
+        name="A",
+        uid="12345",
+        msg=args,
+        time=datetime.now(),
+        msg_id=0,
+        reply=event.reply.message if event.reply else None,
+    )
+    await _chat.fetch()
     try:
         record.chatlog.append(
             {
                 "role": "user",
-                "content": RecordSeg(
-                    name="None",
-                    uid="12345",
-                    msg=args,
-                    time=datetime.now(),
-                    msg_id=0,
-                ).content(),
+                "content": _chat.content(),
             },
         )
         rsp = await chat(message=record.chatlog, model=record.model)
@@ -189,8 +192,10 @@ async def _(bot: Bot, event: Event, args: V11M = CommandArg()):
         if not message:
             await m_chat.send("好像什么都没说……")
             return
+
         if record.append(rsp.model_dump()):
             await m_chat.send(f"你的模型变成 {p_config.fallback_model} 了。")
+
         if "$" in message or "\\[" in message or "\\(" in message:
             try:
                 message = [
@@ -207,10 +212,12 @@ async def _(bot: Bot, event: Event, args: V11M = CommandArg()):
                     ),
                     V11Seg.text(message),
                 ]
+
             except Exception as ex:
                 message = V11Seg.text(message)
         else:
             message = V11Seg.text(message)
+
         message = [
             {
                 "type": "node",
