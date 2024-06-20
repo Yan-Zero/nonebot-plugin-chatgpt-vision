@@ -26,16 +26,6 @@ read = on_command(
 )
 
 
-async def send_image_as_base64(url: str):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            if response.status == 200:
-                b64_encoded = base64.b64encode(await response.read()).decode("utf-8")
-                return f"data:image/jpeg;base64,{b64_encoded}"
-            else:
-                return None
-
-
 @read.handle()
 async def _(event: MessageEvent, args=CommandArg()):
     if isinstance(event, PrivateMessageEvent) and str(event.user_id) not in superusers:

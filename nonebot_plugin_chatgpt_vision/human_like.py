@@ -110,6 +110,7 @@ async def _(bot: Bot, event: V11G, state):
             uid=event.reply.sender.user_id,
             msg=event.reply.message,
             msg_id=event.reply.message_id,
+            time=datetime.fromtimestamp(event.reply.time),
         )
     if (
         await to_me()(bot=bot, event=event, state=state)

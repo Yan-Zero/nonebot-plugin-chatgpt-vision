@@ -22,7 +22,6 @@ from openai import BadRequestError
 from ..chat import draw_image
 from ..chat import chat
 from ..config import Config
-from .misc import send_image_as_base64
 
 
 class Size(Enum):
@@ -238,11 +237,6 @@ async def do_sd(event: MessageEvent, arg: Message = CommandArg()):
         drawing_users[user_id] = True
 
     image = None
-    if event.reply:
-        url = event.reply.message.get(type_="image")
-        if url:
-            image = await send_image_as_base64(url[0])
-
     success = False
     error = ""
     try:

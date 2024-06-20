@@ -25,7 +25,7 @@ except Exception:
     QFACE = {}
 
 
-async def seg2text(seg: V11Seg, image_count: int = 0):
+async def seg2text(seg: V11Seg):
     if seg.is_text():
         return seg.data["text"] or ""
     if seg.type == "at":
@@ -42,10 +42,7 @@ async def seg2text(seg: V11Seg, image_count: int = 0):
     if seg.type == "face":
         return f"[image,{QFACE.get(seg.data['id'], 'notfound')}]"
     if seg.type == "image":
-        if not p_config.image_cdn_url:
-            return f"[image,{await resnet_50(seg.data['file'])}]"
-        else:
-            return f"[image,{seg.data['file']}]"
+        return f"[image,{await resnet_50(seg.data['file'])}]"
     if seg.type == "mface":
         return f"[image,{seg.data['summary'][1:-1]}]"
     if seg.type == "record":
@@ -85,13 +82,15 @@ class RecordSeg:
         else:
             self.images = []
         self.reply = reply
+        if self.reply:
+            print(self.reply.uid)
 
     def __str__(self):
-        ret = f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n"
+        ret = ""
         if self.reply:
-            ret += "Reply to @" + self.reply.name + "(" + self.reply.uid + ")\n"
-            ret += "\n> ".join(str(self.reply).split("\n")[1:])
-        return ret + f"{self.msg.extract_plain_text()}"
+            ret += f"Reply to @{self.reply.name}({self.reply.uid})：\n"
+            ret += "\n> ".join(str(self.reply).split("\n")[1:]) + "\n"
+        return f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n{ret}{self.msg.extract_plain_text()}"
 
     def content(self) -> list:
         ret = [
@@ -278,24 +277,35 @@ class GroupRecord:
                     RecordSeg(
                         seg.name,
                         seg.uid,
-                        seg.msg,
+                        seg.msg.copy(),
                         seg.msg_id,
                         seg.time,
                         seg.images,
+                        seg.reply,
                     )
                 )
                 continue
-            if seg.name == temp[-1].name and seg.uid == temp[-1].uid:
+
+            if (
+                seg.name == temp[-1].name
+                and seg.uid == temp[-1].uid
+                and not seg.reply
+                and not temp[-1].reply
+            ):
                 temp[-1].msg += split + seg.msg
                 temp[-1].images += seg.images
             else:
                 temp.append(
                     RecordSeg(
-                        seg.name, seg.uid, seg.msg, seg.msg_id, seg.time, seg.images
+                        seg.name,
+                        seg.uid,
+                        seg.msg.copy(),
+                        seg.msg_id,
+                        seg.time,
+                        seg.images,
+                        seg.reply,
                     )
                 )
-        for seg in self.msgs[:-3]:
-            seg.images = []
         return [{"role": "system", "content": self.system_prompt}] + [
             {
                 "role": "user" if seg.uid != self.bot_id else "assistant",
@@ -335,6 +345,7 @@ class GroupRecord:
                 msg = msg.replace("[NULL]", "")
             except Exception as ex:
                 self.remake()
+                print(ex)
                 return ["触发警告了，上下文莫得了哦。"]
 
             if "]:" in msg and "]：" not in msg:

@@ -21,8 +21,8 @@ from .config import Config
 from .chat import chat
 from .userrd import UserRD
 from .plugin.dalle import DALLESwitchState
-from .plugin.misc import send_image_as_base64
 from .human_like import GroupRecord
+from .picsql import upload_image
 
 __plugin_meta__ = PluginMetadata(
     name="ChatGPT",
@@ -155,23 +155,16 @@ async def _(bot: Bot, event: Event, args: Message = CommandArg()):
 
     _chat = args.extract_plain_text().strip()
     images = [
-        [
-            await send_image_as_base64(url)
-            for url in re.findall(r"!\[.*?\]\((.*?)\)", _chat)
-        ]
+        [await upload_image(url) for url in re.findall(r"!\[.*?\]\((.*?)\)", _chat)]
     ]
     if isinstance(args, V11M):
         images.extend(
-            [
-                await send_image_as_base64(seg.data["url"])
-                for seg in args
-                if seg.type == "image"
-            ]
+            [await upload_image(seg.data["url"]) for seg in args if seg.type == "image"]
         )
         if event.reply:
             images.extend(
                 [
-                    await send_image_as_base64(seg.data["url"])
+                    await upload_image(seg.data["url"])
                     for seg in event.reply.message
                     if seg.type == "image"
                 ]
