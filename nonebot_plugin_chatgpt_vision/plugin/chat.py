@@ -49,7 +49,7 @@ async def _(bot: Bot, event: Event):
     async with FILE_LOCK:
         with open("./data/user_log.yaml", "w+", encoding="utf-8") as f:
             yaml.dump(user_record, f, allow_unicode=True)
-    await reset.finish(f"清空了……你还剩{record.consumption}$的额度。")
+    await reset.finish(f"清空了……你还剩{record.consumption * 7.2}￥的额度。")
 
 
 @my_model.handle()
@@ -152,11 +152,11 @@ async def _(bot: Bot, event: Event, args: V11M = CommandArg()):
         msg_id=0,
         reply=event.reply.message if event.reply else None,
     )
-    await _chat.fetch()
+    await _chat.fetch(True)
     record.chatlog.append(
         {
             "role": "user",
-            "content": _chat.content(),
+            "content": _chat.content(image_mode=True),
         },
     )
     try:
@@ -206,7 +206,7 @@ async def _(bot: Bot, event: Event, args: V11M = CommandArg()):
             for i in [
                 message,
                 V11Seg.text(f"你现在上下文有{len(record.chatlog)}条。"),
-                V11Seg.text(f"剩余额度{record.consumption}$"),
+                V11Seg.text(f"剩余额度{record.consumption * 7.2}￥"),
             ]
         ]
         message = [

@@ -22,7 +22,6 @@ if p_config.image_mode == 0:
     from sqlalchemy import select
 
     _async_database = None
-    _async_embedding_database = None
 
     def word2vec(word: str) -> list[float]:
         resp = TextEmbedding.call(
@@ -46,13 +45,16 @@ if p_config.image_mode == 0:
         async with AsyncSession(_async_database) as db_session:
             # if pic.u_vec_text:
             pic.u_vec_text = False
-            await _async_embedding_database.execute(
+            conn = await asyncpg.connect(p_config.embedding_sqlurl)
+
+            await conn.execute(
                 "UPDATE savepic_word2vec SET embedding = $1 WHERE id = $2",
                 str(word2vec(pic.name)),
                 pic.id,
             )
             await db_session.merge(pic)
             await db_session.commit()
+            await conn.close()
 
     async def randpic(
         name: str, group: str = "globe", vector: bool = False
@@ -81,8 +83,8 @@ if p_config.image_mode == 0:
 
             if not vector:
                 return None, ""
-
-            datas = await _async_embedding_database.fetch(
+            conn = await asyncpg.connect(p_config.embedding_sqlurl)
+            datas = await conn.fetch(
                 (
                     "SELECT id FROM savepic_word2vec "
                     "WHERE embedding IS NOT NULL "
@@ -90,6 +92,7 @@ if p_config.image_mode == 0:
                 ),
                 str(word2vec(name)),
             )
+            await conn.close()
             if pic := await db_session.scalar(
                 select(PicData)
                 .where(sa.or_(PicData.group == group, PicData.group == "globe"))
@@ -109,20 +112,17 @@ if p_config.image_mode == 0:
             return pic, "（随机检索）"
 
     async def init_db():
-        global _async_database, _async_embedding_database
+        global _async_database
         _async_database = create_async_engine(
             p_config.savepic_sqlurl,
             future=True,
-            pool_size=2,
+            pool_size=0,
+            max_overflow=5,
             # connect_args={"statement_cache_size": 0},
         )
         if p_config.embedding_sqlurl.startswith("postgresql+asyncpg"):
             p_config.embedding_sqlurl = "postgresql" + p_config.embedding_sqlurl[18:]
-        _async_embedding_database = await asyncpg.create_pool(
-            p_config.embedding_sqlurl,
-            min_size=1,
-            max_size=2,  # , statement_cache_size=0,
-        )
+
         dashscope.api_key = p_config.dashscope_api
 
     @gdriver.on_startup
@@ -140,31 +140,33 @@ else:
     async def randpic(
         name: str, group: str = "globe", vector: bool = False
     ) -> tuple[PicData, str]:
-        async with aiohttp.ClientSession(
-            headers={
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-            }
-        ) as session:
-            rsp = await session.get(
-                f"https://www.doutupk.com/search?keyword={quote(name)}"
-            )
-            if rsp.status != 200:
-                return None, ""
-
-            soup = bs4.BeautifulSoup(await rsp.text(), "html.parser")
-            rp = soup.find("div", class_="random_picture")
-            if not rp:
-                return None, ""
-            images = rp.find_all("img")
-            if not images:
-                return None, ""
-            length = len(images)
-            pic = PicData(
-                name=name,
-                group=group,
-                url=images[random.randint(0, min(length - 1, 10))]["data-backup"],
-            )
-            return pic, "（随机检索）"
+        try:
+            async with aiohttp.ClientSession(
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+                }
+            ) as session:
+                rsp = await session.get(
+                    f"https://www.doutupk.com/search?keyword={quote(name)}"
+                )
+                if rsp.status != 200:
+                    return None, ""
+                soup = bs4.BeautifulSoup(await rsp.text(), "html.parser")
+                rp = soup.find("div", class_="random_picture")
+                if not rp:
+                    return None, ""
+                images = rp.find_all("img")
+                if not images:
+                    return None, ""
+                length = len(images)
+                pic = PicData(
+                    name=name,
+                    group=group,
+                    url=images[random.randint(0, min(length - 1, 10))]["data-backup"],
+                )
+                return pic, "（随机检索）"
+        except Exception:
+            return None, ""
 
 
 async def resnet_50(url: str) -> str:

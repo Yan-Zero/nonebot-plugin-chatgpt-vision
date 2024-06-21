@@ -53,10 +53,10 @@ try:
                     GROUP_RECORD[k] = GroupRecord(**_CONFIG.get(k, {}))
                 GROUP_RECORD[k].msgs = data[k].get("msgs", [])
                 GROUP_RECORD[k].rest = data[k].get("rest", 100)
-                GROUP_RECORD[k].rest = data[k].get("block_list", {})
-                GROUP_RECORD[k].credit = data[k].get("credit", 10)
-except Exception:
-    pass
+                GROUP_RECORD[k].block_list = data[k].get("block_list", {})
+                GROUP_RECORD[k].credit = data[k].get("credit", 1)
+except Exception as ex:
+    print(ex)
 
 
 async def human_like_group(bot: Bot, event: Event) -> bool:
@@ -296,4 +296,4 @@ credit = on_command(
 @credit.handle()
 async def _(bot: Bot, event: V11G, state):
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
-    await credit.finish(f"剩余额度：{group.credit: .3f}")
+    await credit.finish(f"剩余额度：{group.credit*7.2: .3f}￥")

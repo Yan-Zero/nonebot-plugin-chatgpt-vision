@@ -27,7 +27,7 @@ except Exception:
     QFACE = {}
 
 
-async def seg2text(seg: V11Seg):
+async def seg2text(seg: V11Seg, chat_with_image: bool = False):
     if seg.is_text():
         return seg.data["text"] or ""
     if seg.type == "at":
@@ -44,11 +44,11 @@ async def seg2text(seg: V11Seg):
     if seg.type == "face":
         return f"[image,{QFACE.get(seg.data['id'], 'notfound')}]"
     if seg.type == "image":
-        if p_config.chat_with_image:
+        if chat_with_image:
             return f""
         return f"[image,{await resnet_50(seg.data['file'])}]"
     if seg.type == "mface":
-        if p_config.chat_with_image:
+        if chat_with_image:
             return f""
         return f"[image,{seg.data['summary'][1:-1]}]"
     if seg.type == "record":
@@ -103,8 +103,8 @@ class RecordSeg:
             ret += "\n> ".join(self.reply.to_str().split("\n")) + "\n"
         return ret + self.msg.extract_plain_text()
 
-    def content(self, with_title: bool = False) -> list:
-        if not p_config.chat_with_image:
+    def content(self, with_title: bool = False, image_mode: bool = False) -> list:
+        if not image_mode:
             return self.to_str(with_title)
         if not self.images:
             return self.to_str(with_title)
@@ -125,9 +125,9 @@ class RecordSeg:
             )
         return ret
 
-    async def fetch(self) -> None:
+    async def fetch(self, image_mode: bool = False) -> None:
         if self.reply:
-            await self.reply.fetch()
+            await self.reply.fetch(image_mode)
             if self.reply.images:
                 self.images.extend(self.reply.images)
 
@@ -141,7 +141,7 @@ class RecordSeg:
                 url = await upload_image(seg.data["url"])
                 seg.data["url"] = url
                 self.images.append(url)
-            temp.append(await seg2text(seg))
+            temp.append(await seg2text(seg, image_mode))
         self.msg = temp
 
 
@@ -161,6 +161,7 @@ class GroupRecord:
     inline_content: dict[str, str]
     maxlog: int
     credit: float = 1
+    image_mode: int = 0
 
     lock: asyncio.Lock
 
@@ -229,6 +230,7 @@ class GroupRecord:
         self.remake()
         self.lock = asyncio.Lock()
         self.maxlog = max_logs
+        self.set(**kwargs)
 
     def set(
         self,
@@ -244,6 +246,7 @@ class GroupRecord:
         split: list = None,
         inline_content: dict[str, str] = None,
         max_logs: int = None,
+        image_mode: int = None,
         **kwargs,
     ):
         if bot_name is not None:
@@ -270,6 +273,8 @@ class GroupRecord:
             self.inline_content = inline_content
         if max_logs is not None:
             self.max_logs = max_logs
+        if image_mode is not None:
+            self.image_mode = image_mode
 
     async def append(
         self,
@@ -289,7 +294,7 @@ class GroupRecord:
             RecordSeg(user_name, user_id, msg, msg_id, time, reply=reply),
             key=lambda x: x.time,
         )
-        await self.msgs[-1].fetch()
+        await self.msgs[-1].fetch(self.image_mode == 1)
         if len(self.msgs) > self.maxlog:
             self.msgs.pop(0)
 
@@ -370,7 +375,9 @@ class GroupRecord:
         return [{"role": "system", "content": self.system_prompt}] + [
             {
                 "role": "user" if seg.uid != self.bot_id else "assistant",
-                "content": seg.content(with_title=True),
+                "content": seg.content(
+                    with_title=True, image_mode=self.image_mode == 1
+                ),
             }
             for seg in temp
         ]
