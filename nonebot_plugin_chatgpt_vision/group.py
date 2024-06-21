@@ -15,6 +15,7 @@ from .chat import chat
 from .chat import error_chat
 from .picsql import resnet_50
 from .picsql import upload_image
+from .fee.userrd import get_comsumption
 
 CACHE_NAME: dict = {}
 QFACE = None
@@ -159,6 +160,7 @@ class GroupRecord:
     cd: float
     inline_content: dict[str, str]
     maxlog: int
+    credit: float = 1
 
     lock: asyncio.Lock
 
@@ -228,6 +230,47 @@ class GroupRecord:
         self.lock = asyncio.Lock()
         self.maxlog = max_logs
 
+    def set(
+        self,
+        bot_name: str = None,
+        bot_id: str = None,
+        system_prompt: str = None,
+        model: str = None,
+        ban_delta: float = None,
+        min_rest: int = None,
+        max_rest: int = None,
+        cd: float = None,
+        searcher: str = None,
+        split: list = None,
+        inline_content: dict[str, str] = None,
+        max_logs: int = None,
+        **kwargs,
+    ):
+        if bot_name is not None:
+            self.bot_name = bot_name
+        if bot_id is not None:
+            self.bot_id = bot_id
+        if system_prompt is not None:
+            self.system_prompt = system_prompt
+        if model is not None:
+            self.model = model
+        if ban_delta is not None:
+            self.ban_delta = timedelta(seconds=ban_delta)
+        if min_rest is not None:
+            self.min_rest = min_rest
+        if max_rest is not None:
+            self.max_rest = max_rest
+        if cd is not None:
+            self.cd = timedelta(seconds=cd)
+        if searcher is not None:
+            self.searcher = get_searcher(searcher)
+        if split is not None:
+            self.split = split
+        if inline_content is not None:
+            self.inline_content = inline_content
+        if max_logs is not None:
+            self.max_logs = max_logs
+
     async def append(
         self,
         user_name: str,
@@ -282,6 +325,8 @@ class GroupRecord:
                 return True
             else:
                 del self.block_list[id]
+        if self.credit < 0:
+            return True
         return False
 
     def merge(self) -> list[dict]:
@@ -345,20 +390,17 @@ class GroupRecord:
     async def say(self) -> list[str]:
         async def recursive(self) -> list[str]:
             try:
-                msg = (
-                    (
-                        await chat(
-                            message=self.merge(),
-                            model=self.model,
-                            temperature=0.8,
-                            max_tokens=1000,
-                        )
-                    )
-                    .choices[0]
-                    .message.content
+                msg = await chat(
+                    message=self.merge(),
+                    model=self.model,
+                    temperature=0.8,
+                    max_tokens=1000,
                 )
-                print(msg)
-                msg = msg.replace("[NULL]", "")
+                try:
+                    self.credit -= get_comsumption(msg.usage.model_dump(), self.model)
+                except Exception as ex:
+                    self.credit -= 1000
+                msg = msg.choices[0].message.content.replace("[NULL]", "")
             except Exception as ex:
                 self.remake()
                 return [await error_chat(ex) + "上下文莫得了哦。"]
@@ -367,7 +409,7 @@ class GroupRecord:
                 msg = msg.replace("]:", "]：", 1)
             msg = msg.split("：", maxsplit=1)[-1]
             _search = False
-            for i in re.finditer(r"\[search,(.*?)\]", msg):
+            for i in re.finditer(r"\[search,\s*(.*?)\]", msg):
                 _search = True
                 rsp = await self.search(i.group(1))
                 if rsp:
@@ -387,7 +429,7 @@ class GroupRecord:
                     )
             if _search:
                 return await recursive(self)
-            for i in re.finditer(r"\[mclick,(\d*?)\]", msg):
+            for i in re.finditer(r"\[mclick,\s*(\d*?)\]", msg):
                 _search = True
                 rsp = await self.click(i.group(1))
                 if rsp:

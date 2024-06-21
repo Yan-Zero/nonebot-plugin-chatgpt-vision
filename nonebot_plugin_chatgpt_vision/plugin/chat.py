@@ -25,12 +25,15 @@ from ..human_like import RecordSeg
 
 p_config: Config = get_plugin_config(Config)
 
-with open("./data/user_log.yaml", "r", encoding="utf-8") as f:
-    user_record: dict[bytes, UserRD] = yaml.load(f, Loader=yaml.FullLoader)
+try:
+    with open("./data/user_log.yaml", "r", encoding="utf-8") as f:
+        user_record: dict[bytes, UserRD] = yaml.load(f, Loader=yaml.UnsafeLoader)
+except Exception:
+    user_record: dict[bytes, UserRD] = {}
 
 m_chat = on_command("chat", priority=40, force_whitespace=True, block=True)
 reset = on_command("reset", priority=5, force_whitespace=True, block=True)
-my_model = on_command("my_model", priority=5, force_whitespace=True, block=True)
+my_model = on_command("model", priority=5, force_whitespace=True, block=True)
 render = AsyncLatex2PNG()
 
 FILE_LOCK: asyncio.Lock = asyncio.Lock()
@@ -44,9 +47,9 @@ async def _(bot: Bot, event: Event):
     record = user_record[uid]
     record.chatlog.clear()
     async with FILE_LOCK:
-        with open("./data/user_log.yaml", "w", encoding="utf-8") as f:
+        with open("./data/user_log.yaml", "w+", encoding="utf-8") as f:
             yaml.dump(user_record, f, allow_unicode=True)
-    await reset.finish(f"清空了……你还剩{record.consumption}$的话了。")
+    await reset.finish(f"清空了……你还剩{record.consumption}$的额度。")
 
 
 @my_model.handle()
@@ -60,13 +63,8 @@ async def _(bot: Bot, event: Event, args=CommandArg()):
     if not args:
         await my_model.finish(f"你的模型是{record.model}")
 
-    if await SUPERUSER(bot, event):
-        if args == "gpt4":
-            args = "gpt-4-turbo"
-        record.model = args
-        await my_model.finish(f"你的模型现在是{args}")
-    else:
-        await my_model.finish("你没有权限修改模型。")
+    record.model = args
+    await my_model.finish(f"你的模型现在是{args}，请注意，不一定可用。")
 
 
 async def get_png(tex: str) -> BytesIO:
@@ -193,7 +191,7 @@ async def _(bot: Bot, event: Event, args: V11M = CommandArg()):
             message = V11Seg.text(message)
 
         async with FILE_LOCK:
-            with open("./data/user_log.yaml", "w", encoding="utf-8") as f:
+            with open("./data/user_log.yaml", "w+", encoding="utf-8") as f:
                 yaml.dump(user_record, f, allow_unicode=True)
 
         message = [

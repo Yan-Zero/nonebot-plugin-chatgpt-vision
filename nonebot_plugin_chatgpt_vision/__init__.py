@@ -25,7 +25,7 @@ from .fee.userrd import UserRD
 from .plugin.dalle import DALLESwitchState
 from .human_like import RecordSeg
 from .picsql import upload_image
-from .plugin.chat import m_chat
+from .plugin.chat import reset
 
 __plugin_meta__ = PluginMetadata(
     name="ChatGPT",

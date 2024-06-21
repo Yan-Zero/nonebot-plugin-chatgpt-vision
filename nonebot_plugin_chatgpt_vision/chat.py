@@ -34,6 +34,7 @@ async def chat(
         rsp = await AsyncOpenAI(**OPENAI_CONFIG[model]).chat.completions.create(
             messages=message, model=model, temperature=temperature, **kwargs
         )
+
         if not rsp:
             raise ValueError("The Response is Null.")
         if not rsp.choices:

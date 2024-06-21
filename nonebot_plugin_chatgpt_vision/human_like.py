@@ -5,6 +5,7 @@ import re
 import yaml
 import pathlib
 import asyncio
+import os
 from datetime import datetime
 from datetime import timedelta
 from nonebot import get_plugin_config
@@ -32,15 +33,30 @@ from .group import seg2text
 p_config: Config = get_plugin_config(Config)
 _CONFIG = None
 try:
+    if not os.path.exists("data/human"):
+        os.mkdir("data/human")
     with open("configs/chatgpt-vision/human.yaml", "r", encoding="utf-8") as f:
         _CONFIG = yaml.safe_load(f) or {}
 except Exception:
     _CONFIG = {}
 
-
-GROUP_RECORD: dict = {
-    str(v): GroupRecord(**_CONFIG.get(str(v), {})) for v in p_config.human_like_group
-}
+GROUP_RECORD: dict = {}
+for v in p_config.human_like_group:
+    if str(v) not in GROUP_RECORD:
+        GROUP_RECORD[str(v)] = GroupRecord(**_CONFIG.get(str(v), {}))
+try:
+    for files in pathlib.Path("./data/human").glob("*.yaml"):
+        with open(files, "r", encoding="utf-8") as f:
+            data = yaml.load(f, yaml.UnsafeLoader)
+            for k in data:
+                if k not in GROUP_RECORD:
+                    GROUP_RECORD[k] = GroupRecord(**_CONFIG.get(k, {}))
+                GROUP_RECORD[k].msgs = data[k].get("msgs", [])
+                GROUP_RECORD[k].rest = data[k].get("rest", 100)
+                GROUP_RECORD[k].rest = data[k].get("block_list", {})
+                GROUP_RECORD[k].credit = data[k].get("credit", 10)
+except Exception:
+    pass
 
 
 async def human_like_group(bot: Bot, event: Event) -> bool:
@@ -141,12 +157,29 @@ async def _(bot: Bot, event: V11G, state):
     group.last_time = datetime.now()
 
     try:
-        for s in await group.say():
-            if s == "[NULL]":
-                continue
-            await humanlike.send(V11Msg(await parser_msg(s, group, event)))
+        p = await group.say()
+        async with group.lock:
+            for s in p:
+                if s == "[NULL]":
+                    continue
+                await humanlike.send(V11Msg(await parser_msg(s, group, event)))
     except Exception as ex:
         print(ex)
+
+    async with group.lock:
+        with open(f"./data/human/{event.group_id}.yaml", "w+", encoding="utf-8") as f:
+            yaml.dump(
+                {
+                    str(event.group_id): {
+                        "msgs": group.msgs,
+                        "rest": group.rest,
+                        "block_list": group.block_list,
+                        "credit": group.credit,
+                    }
+                },
+                f,
+                allow_unicode=True,
+            )
 
 
 async def human_like_on_notice(bot: Bot, event: Event):
@@ -200,6 +233,8 @@ async def _(bot: V11Bot, event: NoticeEvent):
         msg = f"{name}({uid}) 发生了{event.notice_type}"
     await group.append("GroupNotice", "10000", msg, 0, datetime.now())
 
+    if group.check("10000", datetime.now()):
+        return
     group.rest -= 1
     if group.rest > 0:
         if event.notice_type != "group_increase":
@@ -208,14 +243,29 @@ async def _(bot: V11Bot, event: NoticeEvent):
     group.last_time = datetime.now()
 
     try:
-        for s in await group.say():
-            if s == "[NULL]":
-                continue
-            await asyncio.sleep(len(s) / 100)
-            s = await parser_msg(s, group, event)
-            await human_notion.send(V11Msg(s))
+        p = await group.say()
+        async with group.lock:
+            for s in p:
+                if s == "[NULL]":
+                    continue
+                await humanlike.send(V11Msg(await parser_msg(s, group, event)))
     except Exception as ex:
         print(ex)
+
+    async with group.lock:
+        with open(f"./data/human/{group_id}.yaml", "w+", encoding="utf-8") as f:
+            yaml.dump(
+                {
+                    group_id: {
+                        "msgs": group.msgs,
+                        "rest": group.rest,
+                        "block_list": group.block_list,
+                        "credit": group.credit,
+                    }
+                },
+                f,
+                allow_unicode=True,
+            )
 
 
 remake = on_command(
@@ -235,3 +285,15 @@ async def _(bot: Bot, event: V11G, state):
         group.rest = random.randint(group.min_rest, group.max_rest)
         group.remake()
         await remake.finish("已重置")
+
+
+credit = on_command(
+    "额度",
+    rule=to_me(),
+)
+
+
+@credit.handle()
+async def _(bot: Bot, event: V11G, state):
+    group: GroupRecord = GROUP_RECORD[str(event.group_id)]
+    await credit.finish(f"剩余额度：{group.credit: .3f}")

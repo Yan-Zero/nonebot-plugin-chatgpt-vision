@@ -2,7 +2,7 @@ from nonebot import get_plugin_config
 from datetime import datetime
 from datetime import timedelta
 
-from .config import Config
+from ..config import Config
 
 p_config: Config = get_plugin_config(Config)
 
@@ -19,6 +19,10 @@ def get_comsumption(usage: dict, model: str) -> float:
         return (30 * pt + 60 * ct) / 1_000_000
     if model.startswith("glm-4-"):
         return (13.9 * pt + 13.9 * ct) / 1_000_000
+    if model == "gemini-1.5-pro":
+        return (3.5 * pt + 10.5 * ct) / 1_000_000
+    if model == "gemini-1.5-flash":
+        return (0.35 * pt + 1.05 * ct) / 1_000_000
 
     return (10 * pt + 30 * ct) / 1_000_000
 
@@ -62,7 +66,7 @@ class UserRD:
     def append(self, response) -> bool:
         pt = response.get("prompt_tokens", 100)
         try:
-            self.consumption += get_comsumption(
+            self.consumption -= get_comsumption(
                 response.get(
                     "usage",
                     {
@@ -73,7 +77,7 @@ class UserRD:
                 response.get("model", p_config.openai_default_model),
             )
         except Exception:
-            self.consumption += 0.01
+            self.consumption -= 0.01
         self.count += 1
         self.chatlog.append(response["choices"][0]["message"])
 
