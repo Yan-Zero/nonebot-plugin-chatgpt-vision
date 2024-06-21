@@ -60,18 +60,18 @@ async def parser_msg(msg: str, group: GroupRecord, event: Event):
     # 然后提取 @qq(id)
     msg = re.sub(r"@(.+?)\((\d+)\)", r"[CQ:at,qq=\2]", msg)
     # 然后提取 [block,name(id)]
-    for i in re.finditer(r"\[block,(.+?)\((\d+)\)\,(\d+)\]", msg):
+    for i in re.finditer(r"\[block,(.*?)\((\d+)\)\,\s*(\d+)\]", msg):
         group.block(i.group(2), i.group(3))
-    msg = re.sub(r"\[block,(.+?)\((\d+)\),(\d+)\]", r"屏蔽[CQ:at,qq=\2] \3秒", msg)
-    for i in re.finditer(r"\[block,(.+?)\((\d+)\)\]", msg):
+    msg = re.sub(r"\[block,(.*?)\((\d+)\),\s*(\d+)\]", r"屏蔽[CQ:at,qq=\2] \3秒", msg)
+    for i in re.finditer(r"\[block,(.*?)\((\d+)\)\]", msg):
         group.block(i.group(2))
     msg = re.sub(
-        r"\[block,(.+?)\((\d+)\)\]", r"屏蔽[CQ:at,qq=\2] " + f"{group.delta}秒", msg
+        r"\[block,(.*?)\((\d+)\)\]", r"屏蔽[CQ:at,qq=\2] " + f"{group.delta}秒", msg
     )
-    for i in re.finditer(r"\[unblock,(.+?)\((\d+)\)\]", msg):
+    for i in re.finditer(r"\[unblock,(.*?)\((\d+)\)\]", msg):
         group.block(i.group(2), 1)
     msg = re.sub(
-        r"\[unblock,(.+?)\((\d+)\)\]",
+        r"\[unblock,(.*?)\((\d+)\)\]",
         r"解除屏蔽[CQ:at,qq=\2]",
         msg,
     )
@@ -141,12 +141,10 @@ async def _(bot: Bot, event: V11G, state):
     group.last_time = datetime.now()
 
     try:
-        p = await group.say()
-        async with group.lock:
-            for s in p:
-                if s == "[NULL]":
-                    continue
-                await humanlike.send(V11Msg(await parser_msg(s, group, event)))
+        for s in await group.say():
+            if s == "[NULL]":
+                continue
+            await humanlike.send(V11Msg(await parser_msg(s, group, event)))
     except Exception as ex:
         print(ex)
 
@@ -206,20 +204,16 @@ async def _(bot: V11Bot, event: NoticeEvent):
     if group.rest > 0:
         if event.notice_type != "group_increase":
             return
-    if group.lock.locked():
-        return
     group.rest = random.randint(group.min_rest, group.max_rest)
     group.last_time = datetime.now()
 
     try:
-        p = await group.say()
-        async with group.lock:
-            for s in p:
-                if s == "[NULL]":
-                    continue
-                await asyncio.sleep(len(s) / 100)
-                s = await parser_msg(s, group, event)
-                await human_notion.send(V11Msg(s))
+        for s in await group.say():
+            if s == "[NULL]":
+                continue
+            await asyncio.sleep(len(s) / 100)
+            s = await parser_msg(s, group, event)
+            await human_notion.send(V11Msg(s))
     except Exception as ex:
         print(ex)
 

@@ -14,7 +14,7 @@ class Config(BaseModel):
     """ 默认模型 """
     fallback_model: str = "gpt-3.5-turbo"
     """ 回退模型，一个用户达到限额后调用 """
-    limit_for_single_user: float = 0.1
+    limit_for_single_user: float = 0.05
     """ 单个用户限额花费，单位是美元 """
     max_token_per_user: int = 300
     """ 单条最大回复 tokens """

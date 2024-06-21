@@ -8,8 +8,8 @@ p_config: Config = get_plugin_config(Config)
 
 
 def get_comsumption(usage: dict, model: str) -> float:
-    pt = usage["prompt_tokens"]
-    ct = usage["completion_tokens"]
+    pt = usage.get("prompt_tokens", 100)
+    ct = usage.get("completion_tokens", 100)
 
     if model.startswith("gpt-3.5"):
         return (0.5 * pt + 1.5 * ct) / 1_000_000
@@ -21,7 +21,6 @@ def get_comsumption(usage: dict, model: str) -> float:
         return (13.9 * pt + 13.9 * ct) / 1_000_000
 
     return (10 * pt + 30 * ct) / 1_000_000
-    # 乱算的，能用就行了
 
 
 class UserRD:
@@ -31,20 +30,26 @@ class UserRD:
     time: datetime
     count: int
 
-    def __init__(self) -> None:
-        self.chatlog = []
+    def __init__(
+        self,
+        chatlog: list = None,
+        consumption: float = p_config.limit_for_single_user,
+        model: str = p_config.openai_default_model,
+        count: int = 0,
+    ) -> None:
+        self.chatlog = [] if not chatlog else chatlog
         self.time = datetime.now()
-        self.consumption = 0
-        self.model = p_config.openai_default_model
-        self.count = 0
+        self.consumption = consumption
+        self.model = model
+        self.count = count
 
     def check(self) -> bool:
-        if self.consumption < p_config.limit_for_single_user:
+        if self.consumption > 0:
             return False
         if datetime.now() - self.time > timedelta(days=1):
             self.time = datetime.now()
-            self.consumption = 0
-            self.model = p_config.openai_default_model
+            if self.consumption < p_config.limit_for_single_user:
+                self.consumption = p_config.limit_for_single_user
             return False
         return True
 
@@ -55,17 +60,22 @@ class UserRD:
             self.consumption += 0.00765 * count
 
     def append(self, response) -> bool:
-        if "prompt_tokens" in response:
-            pt = response["prompt_tokens"]
-        else:
-            pt = 100
-
-        self.consumption += get_comsumption(response["usage"], response["model"])
+        pt = response.get("prompt_tokens", 100)
+        try:
+            self.consumption += get_comsumption(
+                response.get(
+                    "usage",
+                    {
+                        "prompt_tokens": 100,
+                        "completion_tokens": 100,
+                    },
+                ),
+                response.get("model", p_config.openai_default_model),
+            )
+        except Exception:
+            self.consumption += 0.01
         self.count += 1
         self.chatlog.append(response["choices"][0]["message"])
 
         if pt > p_config.max_history_tokens or self.count >= p_config.max_chatlog_count:
             self.chatlog.pop(0)
-            # self.model = p_config.fallback_model
-            # return True
-        return False
