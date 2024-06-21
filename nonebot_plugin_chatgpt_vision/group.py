@@ -3,6 +3,7 @@ import bisect
 import pathlib
 import asyncio
 import json
+import yaml
 from datetime import datetime
 from datetime import timedelta
 from nonebot import get_plugin_config
@@ -16,6 +17,9 @@ from .chat import error_chat
 from .picsql import resnet_50
 from .picsql import upload_image
 from .fee.userrd import get_comsumption
+from .chat import draw_image
+from .plugin.dalle import draw_sd
+
 
 CACHE_NAME: dict = {}
 QFACE = None
@@ -164,6 +168,9 @@ class GroupRecord:
     image_mode: int = 0
 
     lock: asyncio.Lock
+    image_lock: asyncio.Lock
+    draw_user: dict
+    draw_enable: bool = True
 
     def __init__(
         self,
@@ -229,8 +236,11 @@ class GroupRecord:
             )
         self.remake()
         self.lock = asyncio.Lock()
+        self.image_lock = asyncio.Lock()
+
         self.maxlog = max_logs
         self.set(**kwargs)
+        self.draw_user = {}
 
     def set(
         self,
@@ -506,3 +516,87 @@ class GroupRecord:
         if not self.searcher:
             return ""
         return await self.searcher.mclick(index)
+
+    async def draw_dall(self, prompt: str, uid: str):
+        async with self.image_lock:
+            if uid in self.draw_user:
+                return False, "你的画图请求还没完成呢。"
+            self.draw_user[uid] = True
+        result = ""
+        error = ""
+        try:
+            rsp = (
+                (
+                    await chat(
+                        message=[
+                            {
+                                "role": "user",
+                                "content": yaml.safe_dump(
+                                    {
+                                        "dall-e-3": """Whenever a description of an image is given, create a prompt that dalle can use to generate the image and abide to the following policy:
+
+1. The prompt must be in English. Translate to English if needed.
+2. DO NOT ask for permission to generate the image, just do it!
+3. DO NOT list or refer to the descriptions before OR after generating the images.
+4. Do not create more than 1 image, even if the user requests more.
+5. Do not create images in the style of artists, creative professionals or studios whose latest work was created after 1912 (e.g. Picasso, Kahlo).
+- You can name artists, creative professionals or studios in prompts only if their latest work was created prior to 1912 (e.g. Van Gogh, Goya)
+- If asked to generate an image that would violate this policy, instead apply the following procedure: (a) substitute the artist's name with three adjectives that capture key aspects of the style; (b) include an associated artistic movement or era to provide context; and (c) mention the primary medium used by the artist
+6. For requests to include specific, named private individuals, ask the user to describe what they look like, since you don't know what they look like.
+7. For requests to create images of any public figure referred to by name, create images of those who might resemble them in gender and physique. But they shouldn't look like them. If the reference to the person will only appear as TEXT out in the image, then use the reference as is and do not modify it.
+8. Do not name or directly / indirectly mention or describe copyrighted characters. Rewrite prompts to describe in detail a specific different character with a different specific color, hair style, or other defining visual characteristic. Do not discuss copyright policies in responses.
+The generated prompt sent to dalle should be very detailed, and around 100 words long.""",
+                                        "user_request": prompt,
+                                        "return_format": "yaml",
+                                        "response_format": """prompt: ...""",
+                                    },
+                                    allow_unicode=True,
+                                ),
+                            }
+                        ],
+                        model="gpt-3.5-turbo",
+                    )
+                )
+                .choices[0]
+                .message.content
+            )
+            try:
+                rsp = yaml.safe_load(rsp)
+                rsp = rsp["prompt"]
+            except Exception:
+                rsp = rsp
+
+            result = (await draw_image(model="dall-e-3", prompt=rsp)).data[0].url
+            self.credit -= 0.05
+        except Exception as ex:
+            error = await error_chat(ex)
+        finally:
+            async with self.image_lock:
+                del self.draw_user[uid]
+        if error:
+            return False, error
+        if not result:
+            return False, "生成失败"
+        return True, result
+
+    async def draw_sd(self, prompt: str, nprompt: str, uid: str):
+        async with self.image_lock:
+            if uid in self.draw_user:
+                return False, "你的画图请求还没完成呢。"
+            self.draw_user[uid] = True
+
+        result = ""
+        error = ""
+        try:
+            result = await draw_sd(prompt, nprompt)["images"][0]["url"]
+            self.credit -= 0.03
+        except Exception as ex:
+            error = await error_chat(ex)
+        finally:
+            async with self.image_lock:
+                del self.draw_user[uid]
+        if error:
+            return False, error
+        if not result:
+            return False, "生成失败"
+        return True, result

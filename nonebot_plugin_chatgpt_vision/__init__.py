@@ -22,7 +22,6 @@ from .config import Config
 from .chat import chat
 from .chat import error_chat
 from .fee.userrd import UserRD
-from .plugin.dalle import DALLESwitchState
 from .human_like import RecordSeg
 from .picsql import upload_image
 from .plugin.chat import reset

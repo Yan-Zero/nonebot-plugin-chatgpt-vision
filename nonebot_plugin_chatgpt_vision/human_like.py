@@ -15,12 +15,14 @@ from nonebot import on_notice
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
 from nonebot.adapters.onebot.v11.bot import Bot as V11Bot
+from nonebot.adapters.onebot.v11.bot import send
 from nonebot.adapters.onebot.v11.event import NoticeEvent
 from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN
 from nonebot.adapters import Bot
 from nonebot.rule import Rule
+from nonebot.params import CommandArg
 from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
 
@@ -73,18 +75,30 @@ async def human_like_group(bot: Bot, event: Event) -> bool:
 humanlike = on_message(rule=Rule(human_like_group), priority=1, block=False)
 
 
-async def parser_msg(msg: str, group: GroupRecord, event: Event):
-    # 然后提取 @qq(id)
+async def parser_msg(msg: str, group: GroupRecord, event: Event, bot: Bot):
     msg = re.sub(r"@(.+?)\((\d+)\)", r"[CQ:at,qq=\2]", msg)
-    # 然后提取 [block,name(id)]
     for i in re.finditer(r"\[block,(.*?)\((\d+)\)\,\s*(\d+)\]", msg):
-        group.block(i.group(2), i.group(3))
-    msg = re.sub(r"\[block,(.*?)\((\d+)\),\s*(\d+)\]", r"屏蔽[CQ:at,qq=\2] \3秒", msg)
+        if not (await GROUP_ADMIN(bot=bot, event=event)):
+            group.block(i.group(2), i.group(3))
+            msg = msg.replace(
+                i.group(0),
+                f"[CQ:at,qq={i.group(2)}] 屏蔽{i.group(3)}秒",
+            )
+        else:
+            msg = msg.replace(
+                i.group(0), f"尝试屏蔽[CQ:at,qq={i.group(2)}]，但是很显然对管理无效。"
+            )
     for i in re.finditer(r"\[block,(.*?)\((\d+)\)\]", msg):
-        group.block(i.group(2))
-    msg = re.sub(
-        r"\[block,(.*?)\((\d+)\)\]", r"屏蔽[CQ:at,qq=\2] " + f"{group.delta}秒", msg
-    )
+        if not (await GROUP_ADMIN(bot=bot, event=event)):
+            group.block(i.group(2))
+            msg = msg.replace(
+                i.group(0),
+                f"[CQ:at,qq={i.group(2)}] 屏蔽{group.delta}秒",
+            )
+        else:
+            msg = msg.replace(
+                i.group(0), f"尝试屏蔽[CQ:at,qq={i.group(2)}]，但是很显然对管理无效。"
+            )
     for i in re.finditer(r"\[unblock,(.*?)\((\d+)\)\]", msg):
         group.block(i.group(2), 1)
     msg = re.sub(
@@ -163,7 +177,7 @@ async def _(bot: Bot, event: V11G, state):
             for s in p:
                 if s == "[NULL]":
                     continue
-                await humanlike.send(V11Msg(await parser_msg(s, group, event)))
+                await humanlike.send(V11Msg(await parser_msg(s, group, event, bot=bot)))
     except Exception as ex:
         print(ex)
 
@@ -249,7 +263,7 @@ async def _(bot: V11Bot, event: NoticeEvent):
             for s in p:
                 if s == "[NULL]":
                     continue
-                await humanlike.send(V11Msg(await parser_msg(s, group, event)))
+                await humanlike.send(V11Msg(await parser_msg(s, group, event, bot=bot)))
     except Exception as ex:
         print(ex)
 
@@ -298,3 +312,86 @@ credit = on_command(
 async def _(bot: Bot, event: V11G, state):
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
     await credit.finish(f"剩余额度：{group.credit*7.2: .3f}￥")
+
+
+dall_draw = on_command("画", rule=to_me(), aliases={"draw"})
+
+
+@dall_draw.handle()
+async def _(bot: Bot, event: V11G, arg=CommandArg()):
+    group_id = str(event.group_id)
+    if group_id not in GROUP_RECORD:
+        return
+    group: GroupRecord = GROUP_RECORD[group_id]
+    if not group.draw_enable:
+        await dall_draw.finish("绘图功能未开启")
+    uid = str(event.user_id)
+    if group.check(uid, datetime.now()):
+        return
+    p = arg.extract_plain_text().strip()
+    if not p:
+        await dall_draw.finish("请输入内容")
+    s, u = await group.draw_dall(
+        p,
+        uid,
+    )
+    if s:
+        await send(bot, event=event, message=V11Seg.image(u), reply_message=True)
+    else:
+        await dall_draw.finish(u)
+
+
+sd_drawing = on_command(
+    "sd",
+    rule=to_me(),
+    priority=2,
+    block=True,
+)
+
+
+@sd_drawing.handle()
+async def _(bot: Bot, event: V11G, arg=CommandArg()):
+    group_id = str(event.group_id)
+    if group_id not in GROUP_RECORD:
+        return
+    group: GroupRecord = GROUP_RECORD[group_id]
+    if not group.draw_enable:
+        await sd_drawing.finish("绘图功能未开启")
+    uid = str(event.user_id)
+    if group.check(uid, datetime.now()):
+        return
+    p: str = arg.extract_plain_text().strip()
+    if not p:
+        await sd_drawing.finish("请输入内容")
+    p = p.split("\n\n")
+    s, u = await group.draw_sd(
+        p[0],
+        p[1] if len(p) > 1 else "",
+        uid,
+    )
+    if s:
+        await send(bot, event=event, message=V11Seg.image(u), reply_message=True)
+    else:
+        await sd_drawing.finish(u)
+
+
+dall_switch = on_command(
+    "开关绘图",
+    aliases={"开启绘图", "关闭绘图"},
+    permission=SUPERUSER | GROUP_ADMIN,
+    priority=2,
+    block=True,
+)
+
+
+@dall_switch.handle()
+async def _(event: V11G):
+    group_id = str(event.group_id)
+    if group_id not in GROUP_RECORD:
+        return
+    group: GroupRecord = GROUP_RECORD[group_id]
+
+    group.draw_enable = not group.draw_enable
+    await dall_switch.finish(
+        "已开启绘图功能" if group.draw_enable else "已关闭绘图功能"
+    )
