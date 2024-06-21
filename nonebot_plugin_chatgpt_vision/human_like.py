@@ -18,6 +18,7 @@ from nonebot.adapters.onebot.v11.bot import Bot as V11Bot
 from nonebot.adapters.onebot.v11.event import NoticeEvent
 from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
+from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN
 from nonebot.adapters import Bot
 from nonebot.rule import Rule
 from nonebot.rule import to_me
@@ -271,7 +272,7 @@ async def _(bot: V11Bot, event: NoticeEvent):
 remake = on_command(
     "remake",
     rule=to_me(),
-    permission=SUPERUSER,
+    permission=SUPERUSER | GROUP_ADMIN,
     priority=5,
     force_whitespace=True,
     block=True,
