@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "nonebot-plugin-chatgpt-vision"
-version = "0.8.0"
+version = "0.9.0"
 description = ""
 authors = ["Yan <1964649083@qq.com>"]
 license = "Apache License 2.0"
@@ -21,6 +21,8 @@ duckduckgo-search = "^6.1.6"
 kor = "^1.0.1"
 langchain-community = "^0.2.5"
 html2text = "^2024.2.26"
+# MCP 协议客户端（含 CLI 扩展）
+mcp = { extras = ["cli"], version = "^1.14.0" }
 
 
 [build-system]

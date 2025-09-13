@@ -1,10 +1,9 @@
-""" 模仿人类发言的模式"""
+"""模仿人类发言的模式"""
 
 import random
 import re
 import yaml
 import pathlib
-import asyncio
 import os
 from datetime import datetime
 from datetime import timedelta
@@ -31,7 +30,7 @@ from .picsql import randpic
 from .group import GroupRecord
 from .group import RecordSeg
 from .group import CACHE_NAME
-from .group import seg2text
+
 
 p_config: Config = get_plugin_config(Config)
 _CONFIG = None
