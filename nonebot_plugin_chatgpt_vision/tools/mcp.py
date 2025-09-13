@@ -118,56 +118,13 @@ class MCPSSEClient:
                     async with ClientSession(read, write) as session:  # type: ignore
                         await session.initialize()
                         return await session.call_tool(name, arguments)
-        except Exception as e:
+        except Exception:
             return {"error": f"工具 {name} 调用失败"}
-
-
-class MultiMCPClient:
-    """聚合多个 mcp[cli] 客户端（stdio/SSE），统一 list_tools/call_tool 接口。"""
-
-    def __init__(self, clients: Optional[List[MCPSSEClient | MCPStdIOClient]] = None):
-        self.clients = clients or []
-
-    def extend(self, client: MCPSSEClient | MCPStdIOClient | None):
-        if not client:
-            return
-        if isinstance(client, MultiMCPClient):
-            self.clients.extend(client.clients)
-        else:
-            self.clients.append(client)
-
-    async def list_tools(self) -> List[Dict[str, Any]]:
-        results: List[Dict[str, Any]] = []
-        for c in self.clients:
-            try:
-                tools = await c.list_tools()
-                results.extend(tools or [])
-            except Exception:
-                continue
-        seen: set[str] = set()
-        deduped: List[Dict[str, Any]] = []
-        for t in results:
-            name = t.get("name") if isinstance(t, dict) else None
-            if not name or name in seen:
-                continue
-            seen.add(name)
-            deduped.append(t)
-        return deduped
-
-    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
-        last_error: Any = None
-        for c in self.clients:
-            try:
-                return await c.call_tool(name, arguments)
-            except Exception as e:
-                last_error = str(e)
-                continue
-        return {"error": last_error or f"工具 {name} 调用失败"}
 
 
 def load_mcp_clients_from_yaml(
     path: str | os.PathLike | None,
-) -> Optional[MultiMCPClient]:
+) -> List[MCPSSEClient | MCPStdIOClient]:
     """
     从 YAML 文件构建多个 MCP 客户端，支持：
     - stdio.commands: ["uvx my-mcp", "python -m server"]
@@ -176,16 +133,16 @@ def load_mcp_clients_from_yaml(
     返回 MultiMCPClient 或 None（文件不存在或为空）。
     """
     if not path:
-        return None
+        return []
     p = Path(path)
     if not p.exists():
-        return None
+        return []
     try:
         data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     except Exception:
-        return None
+        return []
 
-    multi = MultiMCPClient([])
+    multi = []
 
     # stdio commands -> 一个命令一个客户端
     stdio_cfg = data.get("stdio") or {}
@@ -197,7 +154,7 @@ def load_mcp_clients_from_yaml(
     if commands:
         for cmd in commands:
             if isinstance(cmd, str) and cmd.strip():
-                multi.extend(MCPStdIOClient(command=cmd))
+                multi.append(MCPStdIOClient(command=cmd))
 
     # sse endpoints -> 一个端点一个客户端
     sse_cfg = data.get("sse") or []
@@ -214,8 +171,5 @@ def load_mcp_clients_from_yaml(
         endpoints.append({"url": url, "headers": headers})
     if endpoints:
         for ep in endpoints:
-            multi.extend(MCPSSEClient(url=ep["url"], headers=ep.get("headers")))
-
-    if not multi.clients:
-        return None
+            multi.append(MCPSSEClient(url=ep["url"], headers=ep.get("headers")))
     return multi

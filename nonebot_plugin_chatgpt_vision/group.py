@@ -18,7 +18,7 @@ from .config import Config
 from .chat import chat
 from .chat import error_chat
 from .chat import draw_image
-from .tools import ToolManager, BlockTool, MCPAdapter
+from .tools import ToolManager, BlockTool, MCPTool
 from .picsql import resnet_50
 from .picsql import upload_image
 from .tools.mcp import load_mcp_clients_from_yaml
@@ -271,10 +271,12 @@ class GroupRecord:
             return
         # 拉取工具并注册
         try:
-            adapter = MCPAdapter(multi)
-            tools = await adapter.get_tools()
-            for t in tools:
-                self.tool_manager.register_tool(t.tool_name, t)
+            for c in multi:
+                tools = await c.list_tools()
+                for t in tools:
+                    self.tool_manager.register_tool(
+                        t["name"], MCPTool(c, t["name"], t["schema"])
+                    )
         except Exception:
             pass
         self.mcp_loaded = True

@@ -3,7 +3,7 @@ import json
 from typing import Dict, Any, List
 from abc import ABC, abstractmethod
 
-from .mcp import MultiMCPClient
+from .mcp import MCPSSEClient, MCPStdIOClient
 
 
 class Tool(ABC):
@@ -65,7 +65,10 @@ class ToolManager:
 
 class MCPTool(Tool):
     def __init__(
-        self, mcp_client: MultiMCPClient, tool_name: str, tool_schema: Dict[str, Any]
+        self,
+        mcp_client: MCPSSEClient | MCPStdIOClient,
+        tool_name: str,
+        tool_schema: Dict[str, Any],
     ):
         self.mcp_client = mcp_client
         self.tool_name = tool_name
@@ -106,16 +109,3 @@ class MCPTool(Tool):
         # 调用 MCP 服务器
         result = await self.mcp_client.call_tool(self.tool_name, kwargs)
         return self._stringify_mcp_result(result)
-
-
-class MCPAdapter:
-    def __init__(self, mcp_client: MultiMCPClient):
-        self.mcp_client = mcp_client
-
-    async def get_tools(self) -> List[MCPTool]:
-        """从 MCP 服务器获取可用工具"""
-        tools_list = await self.mcp_client.list_tools()
-        return [
-            MCPTool(self.mcp_client, tool["name"], tool["schema"])
-            for tool in tools_list
-        ]
