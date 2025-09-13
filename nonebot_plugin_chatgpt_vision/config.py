@@ -49,21 +49,13 @@ class Config(BaseModel):
 
     chat_with_image: bool = False
 
-    # MCP（Model Context Protocol）相关配置（简易 HTTP 适配）
+    # MCP（Model Context Protocol）
     mcp_enabled: bool = False
     """ 是否启用 MCP 工具装载 """
-    mcp_commands: list[str] = []
-    """ 使用 mcp[cli] 的 stdio 启动命令列表，例如 ["uvx my-mcp-server", "python -m myserver"] """
-    mcp_server_url: str = ""
-    """ MCP 工具服务基础地址，如 http://127.0.0.1:8080 """
-    mcp_tools_endpoint: str = "/tools"
-    """ 列表接口，GET 返回 [{name, schema}] 或自定义字段 """
-    mcp_call_endpoint: str = "/call"
-    """ 调用接口，POST: { name, arguments } 返回任意结果 """
-    mcp_auth_header_name: str = "Authorization"
-    """ 认证头字段名（可留空） """
-    mcp_auth_header_value: str = ""
-    """ 认证头字段值（可留空） """
+
+    # 额外：集中 YAML 配置多个 MCP 源
+    mcp_config_file: str = "configs/chatgpt-vision/mcp.yaml"
+    """ YAML 文件路径，支持同时配置多个 stdio/SSE MCP 源（唯一入口） """
 
 
 class PicData(Model):

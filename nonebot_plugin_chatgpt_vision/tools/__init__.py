@@ -122,10 +122,38 @@ class MCPTool(Tool):
     def get_schema(self) -> Dict[str, Any]:
         return {"type": "function", "function": self.tool_schema}
 
+    @staticmethod
+    def _stringify_mcp_result(result: Any) -> str:
+        # mcp[cli] 返回的 call_tool 结果通常带有 content 列表
+        try:
+            # 1) 结果对象形式（如 dataclass，带 content 属性）
+            content = getattr(result, "content", None)
+            if content is not None:
+                parts: List[str] = []
+                for p in content:
+                    # p 可能是对象或 dict
+                    text = getattr(p, "text", None)
+                    if text is None and isinstance(p, dict):
+                        text = p.get("text")
+                    if text is not None:
+                        parts.append(str(text))
+                    else:
+                        parts.append(json.dumps(p, ensure_ascii=False, default=str))
+                return "\n".join(parts).strip() or str(result)
+
+            # 2) dict/list 等可序列化结构
+            if isinstance(result, (dict, list)):
+                return json.dumps(result, ensure_ascii=False, default=str)
+
+            # 3) 兜底
+            return str(result)
+        except Exception:
+            return str(result)
+
     async def execute(self, **kwargs) -> str:
         # 调用 MCP 服务器
         result = await self.mcp_client.call_tool(self.tool_name, kwargs)
-        return json.dumps(result, ensure_ascii=False)
+        return self._stringify_mcp_result(result)
 
 
 class MCPAdapter:

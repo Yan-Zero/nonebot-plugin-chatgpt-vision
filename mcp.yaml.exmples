@@ -1,0 +1,18 @@
+﻿# MCP 多源配置模板（按需启用任意段）
+# 现已完全使用 mcp[cli] 官方客户端，无自定义 HTTP 实现。
+# 支持两种传输：stdio 与 SSE。
+
+# 1) 通过 mcp[cli] 启动的本地 MCP（stdio）
+# 需要先安装：pip install "mcp[cli]"
+# stdio:
+#   commands:
+#     - uvx your-mcp-server
+#     - python -m your_mcp_module
+
+# 2) 通过 SSE 直连远端 MCP 服务
+# sse:
+#   - url: http://127.0.0.1:8080/sse
+#     headers:
+#       Authorization: Bearer xxx
+#   - url: https://your-mcp.example.com/sse
+#     # headers: {}

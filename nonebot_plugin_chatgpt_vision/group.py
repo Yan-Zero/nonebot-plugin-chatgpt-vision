@@ -21,10 +21,10 @@ from .chat import draw_image
 from .tools import ToolManager, SearchTool, ClickTool, BlockTool, MCPAdapter
 from .picsql import resnet_50
 from .picsql import upload_image
+from .tools.mcp import load_mcp_clients_from_yaml
 from .fee.userrd import get_comsumption
 from .plugin.dalle import draw_sd
 from .tools.searcher import get_searcher
-from .tools.mcp import MCPStdIOClient, HttpMCPClient
 
 CACHE_NAME: dict = {}
 QFACE = None
@@ -258,7 +258,7 @@ class GroupRecord:
         self._setup_tools()
 
     def _setup_tools(self):
-        """设置工具（本地+搜索器），MCP 工具懒加载"""
+        """设置工具（本地+搜索器），MCP 工具首次调用前懒加载"""
         if self.searcher:
             self.tool_manager.register_tool("search", SearchTool(self.searcher))
             self.tool_manager.register_tool("click_result", ClickTool(self.searcher))
@@ -272,18 +272,14 @@ class GroupRecord:
         if not p_config.mcp_enabled:
             self.mcp_loaded = True
             return
-        # 优先 stdio（mcp[cli]），可选 HTTP 兜底
-        client = None
-        commands = getattr(p_config, "mcp_commands", []) or []
-        if commands:
-            client = MCPStdIOClient(commands)
-        elif getattr(p_config, "mcp_server_url", ""):
-            client = HttpMCPClient()
-        if not client:
+        # 仅从 YAML 聚合 MCP 客户端
+        multi = load_mcp_clients_from_yaml(getattr(p_config, "mcp_config_file", None))
+        if not multi:
             self.mcp_loaded = True
             return
+        # 拉取工具并注册
         try:
-            adapter = MCPAdapter(client)
+            adapter = MCPAdapter(multi)
             tools = await adapter.get_tools()
             for t in tools:
                 self.tool_manager.register_tool(t.tool_name, t)
