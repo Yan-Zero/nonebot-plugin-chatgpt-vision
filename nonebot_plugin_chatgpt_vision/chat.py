@@ -56,7 +56,7 @@ async def draw_image(
 
 async def error_chat(
     error: str,
-    model: str = "gemini-1.5-flash",
+    model: str = "gemini-2.5-flash",
     temperature: float = 0.2,
     **kwargs,
 ):

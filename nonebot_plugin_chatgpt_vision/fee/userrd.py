@@ -19,11 +19,10 @@ def get_comsumption(usage: dict, model: str) -> float:
         return (30 * pt + 60 * ct) / 1_000_000
     if model.startswith("glm-4-"):
         return (13.9 * pt + 13.9 * ct) / 1_000_000
-    if model == "gemini-1.5-pro":
-        return (3.5 * pt + 10.5 * ct) / 1_000_000
-    if model == "gemini-1.5-flash":
-        return (0.35 * pt + 1.05 * ct) / 1_000_000
-
+    if model.startswith("gemini-2.5-flash"):
+        return (0.12 * pt + 1 * ct) / 1_000_000
+    if model.startswith("gemini-2.5-pro"):
+        return (0.5 * pt + 4 * ct) / 1_000_000
     return (10 * pt + 30 * ct) / 1_000_000
 
 

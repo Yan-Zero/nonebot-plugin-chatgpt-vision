@@ -92,7 +92,6 @@ _✨ NoneBot 插件简单描述 ✨_
 
 | 配置项 | 必填 | 默认值 | 说明 |
 |:-----:|:----:|:----:|:----:|
-| 配置项1 | 是 | 无 | 配置说明 |
 | human_like_chat | 否 | False | 开启 Human Like 模式，内置的人格是嘴臭版 |
 | human_like_group | 否 | [] | Human Like 的群，str list |
 | human_like_max_log | 否 | [] | 保存的聊天记录条数 |

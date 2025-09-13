@@ -170,14 +170,14 @@ class GroupRecord:
     lock: asyncio.Lock
     image_lock: asyncio.Lock
     draw_user: dict
-    draw_enable: bool = True
+    draw_enable: bool = False
 
     def __init__(
         self,
         bot_name: str = "苦咖啡",
         bot_id: str = "100000",
         system_prompt: str = None,
-        model: str = "gpt-3.5-turbo",
+        model: str = "gemini-2.5-flash",
         ban_delta: float = 150,
         min_rest: int = 30,
         max_rest: int = 60,
@@ -554,7 +554,7 @@ The generated prompt sent to dalle should be very detailed, and around 100 words
                                 ),
                             }
                         ],
-                        model="gpt-3.5-turbo",
+                        model="gemini-2.5-flash",
                     )
                 )
                 .choices[0]

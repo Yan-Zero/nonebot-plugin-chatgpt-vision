@@ -12,7 +12,7 @@ class Config(BaseModel):
 
     openai_default_model: str = "gpt-4o"
     """ 默认模型 """
-    fallback_model: str = "gpt-3.5-turbo"
+    fallback_model: str = "gemini-2.5-flash"
     """ 回退模型，一个用户达到限额后调用 """
     limit_for_single_user: float = 0.05
     """ 单个用户限额花费，单位是美元 """
@@ -22,9 +22,6 @@ class Config(BaseModel):
     """ 历史记录最大长度（包括 GPT） """
     max_history_tokens: int = 3000
     """ 历史记录最大 tokens（只包括 User） """
-
-    dashscope_embedding_apikey: str = ""
-    dashscope_embedding_baseurl: str = ""
 
     human_like_chat: bool = False
     human_like_max_tokens: int = 6000
@@ -36,9 +33,6 @@ class Config(BaseModel):
     )
     sd_key: str = ""
 
-    savepic_sqlurl: str
-    embedding_sqlurl: str
-    dashscope_api: str
     notfound_with_jpg: bool = True
 
     image_mode: int = 1
