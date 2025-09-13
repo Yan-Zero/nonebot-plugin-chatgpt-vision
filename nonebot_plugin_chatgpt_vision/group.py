@@ -18,13 +18,12 @@ from .config import Config
 from .chat import chat
 from .chat import error_chat
 from .chat import draw_image
-from .tools import ToolManager, SearchTool, ClickTool, BlockTool, MCPAdapter
+from .tools import ToolManager, BlockTool, MCPAdapter
 from .picsql import resnet_50
 from .picsql import upload_image
 from .tools.mcp import load_mcp_clients_from_yaml
 from .fee.userrd import get_comsumption
 from .plugin.dalle import draw_sd
-from .tools.searcher import get_searcher
 
 CACHE_NAME: dict = {}
 QFACE = None
@@ -202,7 +201,6 @@ class GroupRecord:
         min_rest: int = 30,
         max_rest: int = 60,
         cd: float = 8,
-        searcher: str = "",
         split: list = None,
         inline_content: dict[str, str] = None,
         max_logs: int = p_config.human_like_max_log,
@@ -217,7 +215,6 @@ class GroupRecord:
         else:
             self.split = split
         self.lock = asyncio.Lock()
-        self.searcher = get_searcher(searcher)
         self.delta = timedelta(seconds=ban_delta)
         self.model = model or p_config.openai_default_model
         self.bot_name = bot_name
@@ -259,9 +256,6 @@ class GroupRecord:
 
     def _setup_tools(self):
         """设置工具（本地+搜索器），MCP 工具首次调用前懒加载"""
-        if self.searcher:
-            self.tool_manager.register_tool("search", SearchTool(self.searcher))
-            self.tool_manager.register_tool("click_result", ClickTool(self.searcher))
         self.tool_manager.register_tool("block_user", BlockTool(self))
         # MCP 工具首次调用前懒加载
         self.mcp_loaded = False
@@ -319,7 +313,6 @@ class GroupRecord:
         min_rest: int = None,
         max_rest: int = None,
         cd: float = None,
-        searcher: str = None,
         split: list = None,
         inline_content: dict[str, str] = None,
         max_logs: int = None,
@@ -342,8 +335,6 @@ class GroupRecord:
             self.max_rest = max_rest
         if cd is not None:
             self.cd = timedelta(seconds=cd)
-        if searcher is not None:
-            self.searcher = get_searcher(searcher)
         if split is not None:
             self.split = split
         if inline_content is not None:

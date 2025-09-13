@@ -16,58 +16,6 @@ class Tool(ABC):
         pass
 
 
-class SearchTool(Tool):
-    def __init__(self, searcher):
-        self.searcher = searcher
-
-    def get_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {
-                "name": "search",
-                "description": "搜索网络信息",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string", "description": "搜索查询内容"}
-                    },
-                    "required": ["query"],
-                },
-            },
-        }
-
-    async def execute(self, query: str) -> str:
-        if not self.searcher:
-            return "搜索功能不可用"
-        return await self.searcher.search(query)
-
-
-class ClickTool(Tool):
-    def __init__(self, searcher):
-        self.searcher = searcher
-
-    def get_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {
-                "name": "click_result",
-                "description": "查看搜索结果的详细内容",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "index": {"type": "integer", "description": "要查看的结果索引"}
-                    },
-                    "required": ["index"],
-                },
-            },
-        }
-
-    async def execute(self, index: int) -> str:
-        if not self.searcher:
-            return "搜索功能不可用"
-        return await self.searcher.mclick(index)
-
-
 class BlockTool(Tool):
     def __init__(self, group_record):
         self.group_record = group_record
