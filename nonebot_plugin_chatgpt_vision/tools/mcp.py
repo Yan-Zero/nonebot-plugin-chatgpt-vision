@@ -12,14 +12,12 @@ from mcp.client.sse import sse_client
 
 class MCPStdIOClient:
     """
-    使用 mcp[cli] 的 stdio 客户端与一个或多个 MCP 服务器交互（一次性会话）。
-    - commands: 每个元素是一条命令字符串，例如 "uvx my-mcp-server" 或 "python -m my_server"。
+    使用 mcp[cli] 的 stdio 客户端与单个 MCP 服务器交互（一次性会话）。
+    - command: 一条命令字符串，例如 "uvx my-mcp-server" 或 "python -m my_server"。
     """
 
-    def __init__(
-        self, commands: Optional[List[str]] = None, start_timeout: float = 20.0
-    ):
-        self.commands: List[str] = commands or []
+    def __init__(self, command: Optional[str] = None, start_timeout: float = 20.0):
+        self.command: Optional[str] = command
         self.start_timeout = start_timeout
 
     @staticmethod
@@ -29,168 +27,108 @@ class MCPStdIOClient:
         except Exception:
             return cmd.split()
 
-    async def _with_session(self, cmd: str, coro) -> Any:
-        args = self._split_cmd(cmd)
-        async with stdio_client(*args) as (read, write):  # type: ignore
-            async with ClientSession(read, write) as session:  # type: ignore
-                await session.initialize()
-                return await coro(session)
-
     async def list_tools(self) -> List[Dict[str, Any]]:
-        results: List[Dict[str, Any]] = []
-        for cmd in self.commands:
-            try:
-
-                async def _list(session: ClientSession):
-                    tools = await session.list_tools()
-                    unified: List[Dict[str, Any]] = []
-                    for t in tools:
-                        name = t.name
-                        desc = t.description or ""
-                        params = getattr(
-                            t, "inputSchema", {"type": "object", "properties": {}}
-                        )
-                        unified.append(
-                            {
-                                "name": name,
-                                "schema": {
-                                    "name": name,
-                                    "description": desc,
-                                    "parameters": params,
-                                },
-                            }
-                        )
-                    return unified
-
-                unified = await asyncio.wait_for(
-                    self._with_session(cmd, _list), timeout=self.start_timeout
-                )
-                results.extend(unified)
-            except Exception:
-                continue
-        # 去重
-        seen = set()
-        deduped: List[Dict[str, Any]] = []
-        for t in results:
-            if t["name"] in seen:
-                continue
-            seen.add(t["name"])
-            deduped.append(t)
-        return deduped
+        if not self.command:
+            return []
+        try:
+            async with asyncio.timeout(self.start_timeout):
+                args = self._split_cmd(self.command)
+                async with stdio_client(*args) as (read, write):  # type: ignore
+                    async with ClientSession(read, write) as session:  # type: ignore
+                        await session.initialize()
+                        tools = (await session.list_tools()).tools
+                        unified: List[Dict[str, Any]] = []
+                        for t in tools:
+                            unified.append(
+                                {
+                                    "name": t.name,
+                                    "schema": {
+                                        "name": t.name,
+                                        "description": t.description or "",
+                                        "parameters": t.inputSchema,
+                                    },
+                                }
+                            )
+                        return unified
+        except Exception:
+            return []
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
-        last_error: Any = None
-        for cmd in self.commands:
-            try:
-
-                async def _call(session: ClientSession):
-                    return await session.call_tool(name, arguments)
-
-                return await asyncio.wait_for(
-                    self._with_session(cmd, _call), timeout=self.start_timeout
-                )
-            except Exception as e:
-                last_error = str(e)
-                continue
-        return {"error": last_error or f"工具 {name} 调用失败"}
+        if not self.command:
+            return {"error": f"工具 {name} 调用失败"}
+        try:
+            async with asyncio.timeout(self.start_timeout):
+                args = self._split_cmd(self.command)
+                async with stdio_client(*args) as (read, write):  # type: ignore
+                    async with ClientSession(read, write) as session:  # type: ignore
+                        await session.initialize()
+                        return await session.call_tool(name, arguments)
+        except Exception:
+            return {"error": f"工具 {name} 调用失败"}
 
 
 class MCPSSEClient:
     """
-    使用 mcp[cli] 的 SSE 客户端连接一个或多个 MCP 端点（一次性会话）。
-    - endpoints: [{ url: str, headers?: Dict[str, str] }]
+    使用 mcp[cli] 的 SSE 客户端连接单个 MCP 端点（一次性会话）。
+    - url: SSE URL
+    - headers: 可选请求头
     """
 
     def __init__(
         self,
-        endpoints: Optional[List[Dict[str, Any]]] = None,
+        url: Optional[str] = None,
+        headers: Optional[Dict[str, str]] = None,
         start_timeout: float = 20.0,
     ):
-        self.endpoints = endpoints or []
+        self.url = url
+        self.headers = headers
         self.start_timeout = start_timeout
 
-    async def _with_session(
-        self, url: str, headers: Optional[Dict[str, str]], coro
-    ) -> Any:
-        async with sse_client(url, headers=headers) as (read, write):  # type: ignore
-            async with ClientSession(read, write) as session:  # type: ignore
-                await session.initialize()
-                return await coro(session)
-
     async def list_tools(self) -> List[Dict[str, Any]]:
-        results: List[Dict[str, Any]] = []
-        for ep in self.endpoints:
-            try:
-                url = ep.get("url")
-                headers = ep.get("headers") or None
-                if not url:
-                    continue
-
-                async def _list(session: ClientSession):
-                    tools = await session.list_tools()
-                    unified: List[Dict[str, Any]] = []
-                    for t in tools:
-                        name = t.name
-                        desc = t.description or ""
-                        params = getattr(
-                            t, "inputSchema", {"type": "object", "properties": {}}
-                        )
-                        unified.append(
-                            {
-                                "name": name,
-                                "schema": {
-                                    "name": name,
-                                    "description": desc,
-                                    "parameters": params,
-                                },
-                            }
-                        )
-                    return unified
-
-                unified = await asyncio.wait_for(
-                    self._with_session(url, headers, _list), timeout=self.start_timeout
-                )
-                results.extend(unified)
-            except Exception:
-                continue
-        # 去重
-        seen = set()
-        deduped: List[Dict[str, Any]] = []
-        for t in results:
-            if t["name"] in seen:
-                continue
-            seen.add(t["name"])
-            deduped.append(t)
-        return deduped
+        if not self.url:
+            return []
+        try:
+            async with asyncio.timeout(self.start_timeout):
+                async with sse_client(self.url, headers=self.headers) as (read, write):  # type: ignore
+                    async with ClientSession(read, write) as session:  # type: ignore
+                        await session.initialize()
+                        tools = (await session.list_tools()).tools
+                        unified: List[Dict[str, Any]] = []
+                        for t in tools:
+                            unified.append(
+                                {
+                                    "name": t.name,
+                                    "schema": {
+                                        "name": t.name,
+                                        "description": t.description or "",
+                                        "parameters": t.inputSchema,
+                                    },
+                                }
+                            )
+                        return unified
+        except Exception:
+            return []
 
     async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
-        last_error: Any = None
-        for ep in self.endpoints:
-            try:
-                url = ep.get("url")
-                headers = ep.get("headers") or None
-                if not url:
-                    continue
-
-                async def _call(session: ClientSession):
-                    return await session.call_tool(name, arguments)
-
-                return await asyncio.wait_for(
-                    self._with_session(url, headers, _call), timeout=self.start_timeout
-                )
-            except Exception as e:
-                last_error = str(e)
-                continue
-        return {"error": last_error or f"工具 {name} 调用失败"}
+        if not self.url:
+            return {"error": f"工具 {name} 调用失败"}
+        try:
+            async with asyncio.timeout(self.start_timeout):
+                async with sse_client(self.url, headers=self.headers) as (read, write):  # type: ignore
+                    async with ClientSession(read, write) as session:  # type: ignore
+                        await session.initialize()
+                        return await session.call_tool(name, arguments)
+        except Exception as e:
+            return {"error": f"工具 {name} 调用失败"}
 
 
 class MultiMCPClient:
     """聚合多个 mcp[cli] 客户端（stdio/SSE），统一 list_tools/call_tool 接口。"""
 
-    def __init__(self, clients: Optional[List[object]] = None):
+    def __init__(self, clients: Optional[List[MCPSSEClient | MCPStdIOClient]] = None):
         self.clients = clients or []
 
-    def extend(self, client: object | None):
+    def extend(self, client: MCPSSEClient | MCPStdIOClient | None):
         if not client:
             return
         if isinstance(client, MultiMCPClient):
@@ -249,7 +187,7 @@ def load_mcp_clients_from_yaml(
 
     multi = MultiMCPClient([])
 
-    # stdio commands
+    # stdio commands -> 一个命令一个客户端
     stdio_cfg = data.get("stdio") or {}
     commands: List[str] = []
     if isinstance(stdio_cfg, dict):
@@ -257,9 +195,11 @@ def load_mcp_clients_from_yaml(
     if isinstance(commands, str):
         commands = [commands]
     if commands:
-        multi.extend(MCPStdIOClient(commands=commands))
+        for cmd in commands:
+            if isinstance(cmd, str) and cmd.strip():
+                multi.extend(MCPStdIOClient(command=cmd))
 
-    # sse endpoints
+    # sse endpoints -> 一个端点一个客户端
     sse_cfg = data.get("sse") or []
     if isinstance(sse_cfg, dict):
         sse_cfg = [sse_cfg]
@@ -273,7 +213,8 @@ def load_mcp_clients_from_yaml(
         headers = ep.get("headers") or None
         endpoints.append({"url": url, "headers": headers})
     if endpoints:
-        multi.extend(MCPSSEClient(endpoints=endpoints))
+        for ep in endpoints:
+            multi.extend(MCPSSEClient(url=ep["url"], headers=ep.get("headers")))
 
     if not multi.clients:
         return None

@@ -3,6 +3,8 @@ import json
 from typing import Dict, Any, List
 from abc import ABC, abstractmethod
 
+from .mcp import MultiMCPClient
+
 
 class Tool(ABC):
     @abstractmethod
@@ -62,7 +64,9 @@ class ToolManager:
 
 
 class MCPTool(Tool):
-    def __init__(self, mcp_client, tool_name: str, tool_schema: Dict[str, Any]):
+    def __init__(
+        self, mcp_client: MultiMCPClient, tool_name: str, tool_schema: Dict[str, Any]
+    ):
         self.mcp_client = mcp_client
         self.tool_name = tool_name
         self.tool_schema = tool_schema
@@ -105,7 +109,7 @@ class MCPTool(Tool):
 
 
 class MCPAdapter:
-    def __init__(self, mcp_client):
+    def __init__(self, mcp_client: MultiMCPClient):
         self.mcp_client = mcp_client
 
     async def get_tools(self) -> List[MCPTool]:

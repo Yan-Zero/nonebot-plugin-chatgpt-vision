@@ -96,8 +96,6 @@ class RecordSeg:
         else:
             self.images = []
         self.reply = reply
-        if self.reply:
-            print(self.reply.uid)
 
     def __str__(self):
         return self.to_str(with_title=True)
