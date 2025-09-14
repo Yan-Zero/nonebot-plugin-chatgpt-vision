@@ -1,6 +1,6 @@
 import aiohttp
 import json
-from nonebot import get_driver, require
+from nonebot import require
 from nonebot import get_plugin_config
 from urllib.parse import urljoin
 
@@ -8,13 +8,11 @@ from .config import Config
 from .config import PicData
 
 p_config = get_plugin_config(Config)
-gdriver = get_driver()
 
 
 if p_config.image_mode == 0:
     require("nonebot_plugin_savepic")
-    from nonebot_plugin_savepic.core.sql import randpic
-
+    from nonebot_plugin_savepic.core.sql import randpic  # type: ignore
 
 else:
     import bs4
