@@ -169,6 +169,21 @@ files = [
 ]
 
 [[package]]
+name = "async-tio"
+version = "1.3.2"
+description = "An unoffical API wrapper for tio.run"
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "async_tio-1.3.2-py3-none-any.whl", hash = "sha256:9b12816f90747b8d7ff6cfb03202f6dc9e06949f08be48278bbe722d9d1bd34d"},
+]
+
+[package.dependencies]
+aiohttp = "*"
+typing-extensions = "*"
+
+[[package]]
 name = "asyncpg"
 version = "0.29.0"
 description = "An asyncio PostgreSQL driver"
@@ -2622,4 +2637,4 @@ multidict = ">=4.0"
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "d86ad10dc0e5fa6bcd231b6aca18b5d4ef92dd53698f2eacc80f8b792b2e6d39"
+content-hash = "921466ee5be0c245b7f29635add88ae3f2a25d50ef057299109d0e4735626ae8"

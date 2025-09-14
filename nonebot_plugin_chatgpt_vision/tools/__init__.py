@@ -1,7 +1,8 @@
 import json
 
-from typing import Dict, Any, List
 from abc import ABC, abstractmethod
+from typing import Dict, Any, List
+from nonebot import logger
 
 from .mcp import MCPSSEClient, MCPStdIOClient
 
@@ -58,7 +59,9 @@ class ToolManager:
         return [tool.get_schema() for tool in self.tools.values()]
 
     async def execute_tool(self, name: str, **kwargs) -> str:
+        logger.info(f"Executing tool: {name} with args: {kwargs}")
         if name not in self.tools:
+            logger.warning(f"Tool {name} not found")
             return f"工具 {name} 不存在"
         return await self.tools[name].execute(**kwargs)
 

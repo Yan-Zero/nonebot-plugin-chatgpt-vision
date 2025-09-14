@@ -19,6 +19,7 @@ from .chat import chat
 from .chat import error_chat
 from .chat import draw_image
 from .tools import ToolManager, BlockTool, MCPTool
+from .tools.code import MmaTool, PyTool
 from .picsql import resnet_50
 from .picsql import upload_image
 from .tools.mcp import load_mcp_clients_from_yaml
@@ -254,7 +255,15 @@ class GroupRecord:
 
     def _setup_tools(self):
         """设置工具（本地+搜索器），MCP 工具首次调用前懒加载"""
+        # 注册屏蔽用户类工具
         self.tool_manager.register_tool("block_user", BlockTool(self))
+        # 注册代码执行类工具
+        self.tool_manager.register_tools(
+            {
+                "run_mma": MmaTool(),
+                "run_python": PyTool(),
+            }
+        )
         # MCP 工具首次调用前懒加载
         self.mcp_loaded = False
 
@@ -451,15 +460,7 @@ class GroupRecord:
         ]
 
     def remake(self):
-        self.msgs = [
-            RecordSeg(
-                self.bot_name,
-                self.bot_id,
-                "求我屏蔽你？真是奇怪的癖好[block,抽象(194623),180]",
-                0,
-                datetime.now(),
-            )
-        ]
+        self.msgs = []
         self.block_list = {}
 
     async def say(self) -> list[str]:
