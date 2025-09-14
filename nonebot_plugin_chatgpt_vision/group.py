@@ -8,6 +8,7 @@ import asyncio
 import aiohttp
 
 from PIL import Image
+from typing import Optional, Any
 from datetime import datetime
 from datetime import timedelta
 from nonebot import get_plugin_config
@@ -26,7 +27,7 @@ from .fee.userrd import get_comsumption
 from .plugin.dalle import draw_sd
 
 CACHE_NAME: dict = {}
-QFACE = None
+QFACE = {}
 p_config: Config = get_plugin_config(Config)
 try:
     with open(pathlib.Path(__file__).parent / "qface.json", "r", encoding="utf-8") as f:
@@ -71,7 +72,7 @@ class RecordSeg:
     time: datetime
     msg_id: int
 
-    reply: "RecordSeg"
+    reply: Optional["RecordSeg"]
     images: list[str]
 
     def __init__(
@@ -81,8 +82,8 @@ class RecordSeg:
         msg: V11Msg | str,
         msg_id: int,
         time: datetime,
-        images: list[str] = None,
-        reply: "RecordSeg" = None,
+        images: list[str] = [],
+        reply: Optional["RecordSeg"] = None,
     ):
         self.name = name
         self.uid = uid
@@ -109,12 +110,12 @@ class RecordSeg:
             ret += "\n> ".join(self.reply.to_str().split("\n")) + "\n"
         return ret + self.msg.extract_plain_text()
 
-    def content(self, with_title: bool = False, image_mode: bool = False) -> list:
+    def content(self, with_title: bool = False, image_mode: bool = False) -> list | str:
         if not image_mode:
             return self.to_str(with_title)
         if not self.images:
             return self.to_str(with_title)
-        ret = [
+        ret: list[dict[str, Any]] = [
             {
                 "type": "text",
                 "text": self.to_str(with_title),
@@ -175,7 +176,7 @@ class GroupRecord:
     delta: timedelta
     max_rest: int
     min_rest: int
-    cd: float
+    cd: timedelta
     inline_content: dict[str, str]
     maxlog: int
     credit: float = 1
@@ -193,21 +194,21 @@ class GroupRecord:
         self,
         bot_name: str = "苦咖啡",
         bot_id: str = "100000",
-        system_prompt: str = None,
-        model: str = None,
+        system_prompt: Optional[str] = None,
+        model: Optional[str] = None,
         ban_delta: float = 150,
         min_rest: int = 30,
         max_rest: int = 60,
         cd: float = 8,
-        split: list = None,
-        inline_content: dict[str, str] = None,
+        split: Optional[list[str]] = None,
+        inline_content: Optional[dict[str, str]] = None,
         max_logs: int = p_config.human_like_max_log,
         **kwargs,
     ):
         self.max_rest = max_rest
         self.rest = max_rest
         self.min_rest = min_rest
-        self.cd = cd
+        self.cd = timedelta(seconds=cd)
         if split is None:
             self.split = ["。", "，", "\n"]
         else:
@@ -312,18 +313,18 @@ class GroupRecord:
 
     def set(
         self,
-        bot_name: str = None,
-        bot_id: str = None,
-        system_prompt: str = None,
-        model: str = None,
-        ban_delta: float = None,
-        min_rest: int = None,
-        max_rest: int = None,
-        cd: float = None,
-        split: list = None,
-        inline_content: dict[str, str] = None,
-        max_logs: int = None,
-        image_mode: int = None,
+        bot_name: Optional[str] = None,
+        bot_id: Optional[str] = None,
+        system_prompt: Optional[str] = None,
+        model: Optional[str] = None,
+        ban_delta: Optional[float] = None,
+        min_rest: Optional[int] = None,
+        max_rest: Optional[int] = None,
+        cd: Optional[float] = None,
+        split: Optional[list] = None,
+        inline_content: Optional[dict[str, str]] = None,
+        max_logs: Optional[int] = None,
+        image_mode: Optional[int] = None,
         **kwargs,
     ):
         if bot_name is not None:
@@ -355,15 +356,17 @@ class GroupRecord:
         self,
         user_name: str,
         user_id: str,
-        msg: V11Msg,
+        msg: V11Msg | str,
         msg_id: int,
         time: datetime,
-        reply: RecordSeg = None,
+        reply: Optional[RecordSeg] = None,
     ):
         if self.check(user_id, time):
             return
         if msg == "[NULL]":
             return
+        if isinstance(msg, str):
+            msg = V11Msg(msg)
         bisect.insort(
             self.msgs,
             RecordSeg(user_name, user_id, msg, msg_id, time, reply=reply),
@@ -373,9 +376,9 @@ class GroupRecord:
         if len(self.msgs) > self.maxlog:
             self.msgs.pop(0)
 
-    def block(self, id: str, delta: float = None):
+    def block(self, id: str, delta: Optional[float] = None):
         try:
-            delta = float(delta)
+            delta = float(delta or 0)
         except Exception:
             delta = self.delta.total_seconds()
         self.block_list[id] = datetime.now() + timedelta(
@@ -497,10 +500,13 @@ class GroupRecord:
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)
 
-                        # 执行工具
-                        result = await self.tool_manager.execute_tool(
-                            function_name, **function_args
-                        )
+                        try:
+                            # 执行工具
+                            result = await self.tool_manager.execute_tool(
+                                function_name, **function_args
+                            )
+                        except Exception as ex:
+                            result = f"工具调用失败：{ex}"
                         await self.append(
                             f"{function_name.title()}Tool",
                             "10001",
@@ -558,21 +564,6 @@ class GroupRecord:
 
         async with self.lock:
             return await recursive(self)
-
-    async def search(self, keywords) -> str:
-        if not self.searcher:
-            return ""
-        return await self.searcher.search(keywords)
-
-    async def click(self, index) -> str:
-        if not isinstance(index, int):
-            try:
-                index = int(index)
-            except Exception:
-                return "id must be int"
-        if not self.searcher:
-            return ""
-        return await self.searcher.mclick(index)
 
     async def draw_dall(self, prompt: str, uid: str):
         async with self.image_lock:
@@ -645,7 +636,7 @@ The generated prompt sent to dalle should be very detailed, and around 100 words
         result = ""
         error = ""
         try:
-            result = await draw_sd(prompt, nprompt)["images"][0]["url"]
+            result = (await draw_sd(prompt, nprompt))["images"][0]["url"]
             self.credit -= 0.03
         except Exception as ex:
             error = await error_chat(ex)

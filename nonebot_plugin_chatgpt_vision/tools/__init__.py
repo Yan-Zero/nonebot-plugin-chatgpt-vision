@@ -130,8 +130,8 @@ class MCPUnifiedClient:
             async with asyncio.timeout(self.start_timeout):
                 async with FastMCPClient(self.spec) as client:  # type: ignore[arg-type]
                     return await client.call_tool(name, arguments)
-        except Exception:
-            return {"error": f"工具 {name} 调用失败"}
+        except Exception as ex:
+            return {"error": f"工具 {name} 调用失败", "exception": str(ex)}
 
 
 def _split_cmd(cmd: str) -> List[str]:

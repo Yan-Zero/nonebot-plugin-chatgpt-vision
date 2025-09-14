@@ -151,7 +151,7 @@ async def _(bot: Bot, event: V11G, state):
         return
     if group.lock.locked():
         return
-    if group.last_time + timedelta(seconds=group.cd) > datetime.now():
+    if group.last_time + group.cd > datetime.now():
         return True
     if event.message.extract_plain_text().startswith("/"):
         return

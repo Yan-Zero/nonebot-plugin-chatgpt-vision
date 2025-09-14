@@ -21,7 +21,7 @@ async def chat(
     message: list,
     model: str,
     times: int = 3,
-    temperature: int = 0.65,
+    temperature: float = 0.65,
     **kwargs,
 ):
     """
@@ -71,7 +71,7 @@ async def draw_image(
 
 
 async def error_chat(
-    error: str,
+    error: str | Exception,
     model: str | None = None,
     temperature: float = 0.2,
     **kwargs,
@@ -96,5 +96,5 @@ async def error_chat(
         if not rsp.choices:
             raise ValueError("The Choice is Null.")
         return rsp.choices[0].message.content
-    except Exception as ex:
+    except Exception:
         return str(error)
