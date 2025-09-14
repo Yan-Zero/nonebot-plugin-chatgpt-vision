@@ -18,11 +18,10 @@ from .config import Config
 from .chat import chat
 from .chat import error_chat
 from .chat import draw_image
-from .tools import ToolManager, BlockTool, MCPTool
+from .tools import ToolManager, BlockTool, MCPTool, load_mcp_clients_from_yaml
 from .tools.code import MmaTool, PyTool
 from .picsql import resnet_50
 from .picsql import upload_image
-from .tools.mcp import load_mcp_clients_from_yaml
 from .fee.userrd import get_comsumption
 from .plugin.dalle import draw_sd
 
@@ -301,8 +300,7 @@ class GroupRecord:
             name = fn.get("name")
             if not name:
                 continue
-            desc = fn.get("description", "")
-            items.append(f"- {name}：{desc}")
+            items.append(f"- {name}")
         if not items:
             return self.system_prompt
         return (
@@ -495,7 +493,6 @@ class GroupRecord:
 
                 # 检查是否有工具调用
                 if getattr(choice.message, "tool_calls", None):
-                    tool_results = []
                     for tool_call in choice.message.tool_calls:
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)
@@ -504,27 +501,10 @@ class GroupRecord:
                         result = await self.tool_manager.execute_tool(
                             function_name, **function_args
                         )
-
-                        tool_results.append(
-                            {
-                                "tool_call_id": tool_call.id,
-                                "role": "tool",
-                                "name": function_name,
-                                "content": result,
-                            }
-                        )
-
-                        await self.append(
-                            self.bot_name,
-                            self.bot_id,
-                            f"[{function_name}] {json.dumps(function_args, ensure_ascii=False)}",
-                            1,
-                            datetime.now(),
-                        )
                         await self.append(
                             f"{function_name.title()}Tool",
                             "10001",
-                            result,
+                            f"Args: {tool_call.function.arguments}\n\nResult: {result}",
                             1,
                             datetime.now(),
                         )

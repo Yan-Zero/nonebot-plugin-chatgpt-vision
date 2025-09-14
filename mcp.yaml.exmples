@@ -1,6 +1,5 @@
 ﻿# MCP 多源配置模板（按需启用任意段）
-# 现已完全使用 mcp[cli] 官方客户端，无自定义 HTTP 实现。
-# 支持两种传输：stdio 与 SSE。
+# 支持三种传输：stdio（本地命令）、SSE（服务端推送）与可流式 HTTP。
 
 # 1) 通过 mcp[cli] 启动的本地 MCP（stdio）
 # 需要先安装：pip install "mcp[cli]"
@@ -16,3 +15,18 @@
 #       Authorization: Bearer xxx
 #   - url: https://your-mcp.example.com/sse
 #     # headers: {}
+
+# 3) 通过可流式 HTTP 直连远端 MCP 服务
+#    约定：
+#      - 列表工具：GET  {base_url}{tools_endpoint}，默认 /tools
+#      - 调用工具：POST {base_url}{call_endpoint}，默认 /call
+#        返回可为 JSON 或流式文本（SSE/NDJSON/纯文本按行聚合）
+# http:
+#   - base_url: http://127.0.0.1:9000
+#     tools_endpoint: /tools        # 可省略
+#     call_endpoint: /call          # 可省略
+#     headers:
+#       Authorization: Bearer xxx
+#   - base_url: https://mcp-http.example.com
+#     auth_header_name: Authorization   # 也可用显式的 name/value 组合
+#     auth_header_value: Bearer xxx
