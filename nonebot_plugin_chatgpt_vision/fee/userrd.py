@@ -23,6 +23,8 @@ def get_comsumption(usage: dict, model: str) -> float:
         return (0.12 * pt + 1 * ct) / 1_000_000
     if model.startswith("gemini-2.5-pro"):
         return (0.5 * pt + 4 * ct) / 1_000_000
+    if model.startswith("gpt-5-mini"):
+        return (0.25 * pt + 2 * ct) / 1_000_000
     return (10 * pt + 30 * ct) / 1_000_000
 
 
@@ -35,7 +37,7 @@ class UserRD:
 
     def __init__(
         self,
-        chatlog: list = None,
+        chatlog: list | None = None,
         consumption: float = p_config.limit_for_single_user,
         model: str = p_config.openai_default_model,
         count: int = 0,
@@ -82,3 +84,4 @@ class UserRD:
 
         if pt > p_config.max_history_tokens or self.count >= p_config.max_chatlog_count:
             self.chatlog.pop(0)
+        return True

@@ -1,11 +1,5 @@
 from nonebot import get_plugin_config
 from pydantic import BaseModel
-from sqlalchemy import TEXT
-from sqlalchemy import BOOLEAN
-from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.ext.declarative import declarative_base
-
-Model = declarative_base(name="Model")
 
 
 class Config(BaseModel):
@@ -57,24 +51,6 @@ class Config(BaseModel):
     # 额外：集中 YAML 配置多个 MCP 源
     mcp_config_file: str = "configs/chatgpt-vision/mcp.yaml"
     """ YAML 文件路径，支持同时配置多个 stdio/SSE MCP 源（唯一入口） """
-
-
-class PicData(Model):
-    """消息记录"""
-
-    __tablename__ = "picdata"
-
-    __table_args__ = {"extend_existing": True}
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(TEXT)
-    """ 图片名称 """
-    group: Mapped[str] = mapped_column(TEXT)
-    """ 所属群组 id """
-    url: Mapped[str] = mapped_column(TEXT)
-    """ 图片目录 """
-    u_vec_img: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
-    u_vec_text: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
 
 
 p_config: Config = get_plugin_config(Config)

@@ -74,6 +74,12 @@ async def parser_msg(msg: str, group: GroupRecord, event: V11G, bot: Bot):
     for i in re.finditer(r"\[image,(.+?)\]", msg):
         pic, _ = await randpic(i.group(1), f"qq_group:{event.group_id}", True)
         if pic:
+            if not isinstance(pic, dict):
+                pic = {
+                    "url": getattr(pic, "url", ""),
+                    "name": getattr(pic, "name", ""),
+                    "group": getattr(pic, "group", ""),
+                }
             msg = msg.replace(
                 f"[image,{i.group(1)}]",
                 f"[CQ:image,file={pic['url'] if pic['url'].startswith('http') else pathlib.Path(pic['url']).absolute().as_uri()}]",
@@ -81,6 +87,7 @@ async def parser_msg(msg: str, group: GroupRecord, event: V11G, bot: Bot):
             )
         else:
             msg = msg.replace(f"[image,{i.group(1)}]", f"[{i.group(1)} Not Found]")
+
     return msg
 
 
