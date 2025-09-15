@@ -21,7 +21,7 @@ from ..config import Config
 from ..chat import chat
 from ..chat import error_chat
 from ..fee.userrd import UserRD
-from ..human_like import RecordSeg
+from ..record import RecordSeg
 
 p_config: Config = get_plugin_config(Config)
 

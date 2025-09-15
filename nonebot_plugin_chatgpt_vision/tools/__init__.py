@@ -26,68 +26,32 @@ class Tool(ABC):
         """执行工具"""
         pass
 
-
-class BlockTool(Tool):
-    def __init__(self, group_record):
-        self.group_record = group_record
-
-    def get_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {
-                "name": "block_user",
-                "description": "屏蔽用户，注意，你得告知用户已被屏蔽。",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "user_id": {"type": "string", "description": "要屏蔽的用户ID"},
-                        "duration": {
-                            "type": "number",
-                            "description": "屏蔽时长（秒），如果为0则是取消屏蔽。",
-                        },
-                    },
-                    "required": ["user_id", "duration"],
-                },
-            },
-        }
-
-    async def execute(self, user_id: str, duration: float) -> str:
-        self.group_record.block(user_id, duration)
-        return f"已屏蔽用户 {user_id} {duration} 秒"
-
-
-class ListBlockedTool(Tool):
-    def __init__(self, group_record):
-        self.group_record = group_record
-
-    def get_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {
-                "name": "list_blocked_users",
-                "description": "列出当前被屏蔽的用户",
-                "parameters": {
-                    "type": "object",
-                    "properties": {},
-                    "required": [],
-                },
-            },
-        }
-
-    async def execute(self, **kwargs) -> str:
-        blocked = self.group_record.list_blocked()
-        if not blocked:
-            return "当前没有被屏蔽的用户"
-        return "当前被屏蔽的用户有：\n" + "\n".join(
-            f"{k}（剩余{v:.1f}秒）" for k, v in blocked
-        )
+    def get_name(self) -> str:
+        """返回工具名称"""
+        schema = self.get_schema()
+        if schema.get("type") == "function":
+            function = schema.get("function", {})
+            return function.get("name", "unknown_tool")
+        return "unknown_tool"
 
 
 class ToolManager:
     def __init__(self):
         self.tools: Dict[str, Tool] = {}
 
-    def register_tool(self, name: str, tool: Tool):
+    def register_tool(self, tool: Tool, name: str | None = None):
+        # Backward compatibility: support register_tool(name, tool)
+        if isinstance(tool, str) and isinstance(name, Tool):
+            import warnings
+
+            warnings.warn(
+                "register_tool(name, tool) is deprecated. Use register_tool(tool, name=None) instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            tool, name = name, tool
+        if not name:
+            name = tool.get_name()
         self.tools[name] = tool
 
     def register_tools(self, mapping: Dict[str, Tool]):

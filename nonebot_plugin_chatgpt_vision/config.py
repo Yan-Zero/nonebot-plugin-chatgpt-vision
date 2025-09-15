@@ -1,3 +1,4 @@
+from nonebot import get_plugin_config
 from pydantic import BaseModel
 from sqlalchemy import TEXT
 from sqlalchemy import BOOLEAN
@@ -74,3 +75,6 @@ class PicData(Model):
     """ 图片目录 """
     u_vec_img: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
     u_vec_text: Mapped[bool] = mapped_column(BOOLEAN, nullable=False, default=False)
+
+
+p_config: Config = get_plugin_config(Config)

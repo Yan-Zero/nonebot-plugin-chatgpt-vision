@@ -1,165 +1,24 @@
-import io
 import json
-import base64
 import bisect
-import pathlib
 import asyncio
-import aiohttp
 
-from PIL import Image
-from typing import Optional, Any
+from typing import Optional
 from datetime import datetime
 from datetime import timedelta
-from nonebot import get_plugin_config
-from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
 
 from .chat import chat
 from .chat import error_chat
-from .tools import ToolManager, BlockTool, MCPTool, load_mcp_clients_from_yaml
-from .config import Config
-from .picsql import resnet_50
-from .picsql import upload_image
+from .tools import (
+    ToolManager,
+    MCPTool,
+    load_mcp_clients_from_yaml,
+)
+from .config import p_config
+from .record import RecordSeg
 from .tools.code import MmaTool, PyTool
+from .tools.block import BlockTool, ListBlockedTool
 from .fee.userrd import get_comsumption
-from .plugin.dalle import draw_sd
-
-CACHE_NAME: dict = {}
-QFACE = {}
-p_config: Config = get_plugin_config(Config)
-try:
-    with open(pathlib.Path(__file__).parent / "qface.json", "r", encoding="utf-8") as f:
-        QFACE = json.load(f)
-except Exception:
-    QFACE = {}
-
-
-async def seg2text(seg: V11Seg, chat_with_image: bool = False):
-    if seg.is_text():
-        return seg.data["text"] or ""
-    if seg.type == "at":
-        if seg.data["qq"] in CACHE_NAME:
-            name = CACHE_NAME[seg.data["qq"]]
-        elif "name" in seg.data:
-            name = seg.data["name"]
-            if not name or not name.strip():
-                name = str(seg.data["qq"])[:5]
-            CACHE_NAME[seg.data["qq"]] = name
-        else:
-            name = str(seg.data["qq"])[:5]
-        return f"@{name}({seg.data['qq']}) "
-    if seg.type == "face":
-        return f"[image,{QFACE.get(seg.data['id'], 'notfound')}]"
-    if seg.type == "image":
-        if chat_with_image:
-            return ""
-        return f"[image,{await resnet_50(seg.data['file'])}]"
-    if seg.type == "mface":
-        if chat_with_image:
-            return ""
-        return f"[image,{seg.data['summary'][1:-1]}]"
-    if seg.type == "record":
-        return "[record]"
-    return f"[{seg.type}]"
-
-
-class RecordSeg:
-    name: str
-    uid: str
-    msg: V11Msg
-    time: datetime
-    msg_id: int
-
-    reply: Optional["RecordSeg"]
-    images: list[str]
-
-    def __init__(
-        self,
-        name: str,
-        uid: str,
-        msg: V11Msg | str,
-        msg_id: int,
-        time: datetime,
-        images: list[str] = [],
-        reply: Optional["RecordSeg"] = None,
-    ):
-        self.name = name
-        self.uid = uid
-        if isinstance(msg, str):
-            msg = V11Msg(msg)
-        self.msg = msg
-        self.time = time
-        self.msg_id = msg_id
-        if images:
-            self.images = images
-        else:
-            self.images = []
-        self.reply = reply
-
-    def __str__(self):
-        return self.to_str(with_title=True)
-
-    def to_str(self, with_title: bool = False):
-        ret = ""
-        if with_title:
-            ret += f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n"
-        if self.reply:
-            ret += f"Reply to @{self.reply.name}({self.reply.uid})：\n"
-            ret += "\n> ".join(self.reply.to_str().split("\n")) + "\n"
-        return ret + self.msg.extract_plain_text()
-
-    def content(self, with_title: bool = False, image_mode: bool = False) -> list | str:
-        if not image_mode:
-            return self.to_str(with_title)
-        if not self.images:
-            return self.to_str(with_title)
-        ret: list[dict[str, Any]] = [
-            {
-                "type": "text",
-                "text": self.to_str(with_title),
-            }
-        ]
-        for i in self.images:
-            ret.append(
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": i,
-                    },
-                }
-            )
-        return ret
-
-    async def fetch(self, image_mode: bool = False) -> None:
-        if self.reply:
-            await self.reply.fetch(image_mode)
-            if self.reply.images:
-                self.images.extend(self.reply.images)
-
-        temp = V11Msg()
-        for seg in self.msg:
-            if seg.type == "image":
-                url = seg.data["file"]
-                # 处理GIF转PNG
-                url = await convert_gif_to_png_base64(url)
-                # 如果不是base64格式，继续原来的上传逻辑
-                if not url.startswith("data:"):
-                    url = await upload_image(url)
-                seg.data["file"] = url
-                self.images.append(url)
-
-            if seg.type == "mface":
-                url = seg.data["url"]
-                # 处理GIF转PNG
-                url = await convert_gif_to_png_base64(url)
-                # 如果不是base64格式，继续原来的上传逻辑
-                if not url.startswith("data:"):
-                    url = await upload_image(url)
-                seg.data["url"] = url
-                self.images.append(url)
-
-            temp.append(await seg2text(seg, image_mode))
-        self.msg = temp
 
 
 class GroupRecord:
@@ -171,7 +30,6 @@ class GroupRecord:
     last_time: datetime = datetime.now()
     block_list: dict[str, datetime]
     bot_id: str
-    delta: timedelta
     max_rest: int
     min_rest: int
     cd: timedelta
@@ -181,9 +39,6 @@ class GroupRecord:
     image_mode: int = 0
 
     lock: asyncio.Lock
-    image_lock: asyncio.Lock
-    draw_user: dict
-    draw_enable: bool = False
 
     tool_manager: ToolManager
     mcp_loaded: bool = False
@@ -194,7 +49,6 @@ class GroupRecord:
         bot_id: str = "100000",
         system_prompt: Optional[str] = None,
         model: Optional[str] = None,
-        ban_delta: float = 150,
         min_rest: int = 30,
         max_rest: int = 60,
         cd: float = 8,
@@ -212,7 +66,6 @@ class GroupRecord:
         else:
             self.split = split
         self.lock = asyncio.Lock()
-        self.delta = timedelta(seconds=ban_delta)
         self.model = model or p_config.openai_default_model
         self.bot_name = bot_name
         self.bot_id = bot_id
@@ -242,11 +95,9 @@ class GroupRecord:
             )
         self.remake()
         self.lock = asyncio.Lock()
-        self.image_lock = asyncio.Lock()
 
         self.maxlog = max_logs
         self.set(**kwargs)
-        self.draw_user = {}
 
         self.tool_manager = ToolManager()
         self._setup_tools()
@@ -254,14 +105,11 @@ class GroupRecord:
     def _setup_tools(self):
         """设置工具（本地+搜索器），MCP 工具首次调用前懒加载"""
         # 注册屏蔽用户类工具
-        self.tool_manager.register_tool("block_user", BlockTool(self))
+        self.tool_manager.register_tool(BlockTool(self))
+        self.tool_manager.register_tool(ListBlockedTool(self))
         # 注册代码执行类工具
-        self.tool_manager.register_tools(
-            {
-                "run_mma": MmaTool(),
-                "run_python": PyTool(),
-            }
-        )
+        self.tool_manager.register_tool(MmaTool())
+        self.tool_manager.register_tool(PyTool())
         # MCP 工具首次调用前懒加载
         self.mcp_loaded = False
 
@@ -281,9 +129,7 @@ class GroupRecord:
             for c in multi:
                 tools = await c.list_tools()
                 for t in tools:
-                    self.tool_manager.register_tool(
-                        t["name"], MCPTool(c, t["name"], t["schema"])
-                    )
+                    self.tool_manager.register_tool(MCPTool(c, t["name"], t["schema"]))
         except Exception:
             pass
         self.mcp_loaded = True
@@ -315,7 +161,6 @@ class GroupRecord:
         bot_id: Optional[str] = None,
         system_prompt: Optional[str] = None,
         model: Optional[str] = None,
-        ban_delta: Optional[float] = None,
         min_rest: Optional[int] = None,
         max_rest: Optional[int] = None,
         cd: Optional[float] = None,
@@ -333,8 +178,6 @@ class GroupRecord:
             self.system_prompt = system_prompt
         if model is not None:
             self.model = model
-        if ban_delta is not None:
-            self.ban_delta = timedelta(seconds=ban_delta)
         if min_rest is not None:
             self.min_rest = min_rest
         if max_rest is not None:
@@ -378,7 +221,7 @@ class GroupRecord:
         try:
             delta = float(delta or 0)
         except Exception:
-            delta = self.delta.total_seconds()
+            delta = 150
         self.block_list[id] = datetime.now() + timedelta(
             seconds=max(1, min(delta, 3153600000))
         )
@@ -404,7 +247,7 @@ class GroupRecord:
             "10000",
             f"@{msg.name}({msg.uid}) 撤回了一条消息",
             0,
-            datetime.now(),
+            self.msgs[id_].time,
         )
         return True
 
@@ -579,76 +422,3 @@ class GroupRecord:
 
         async with self.lock:
             return await recursive(self)
-
-    async def draw_sd(self, prompt: str, nprompt: str, uid: str):
-        async with self.image_lock:
-            if uid in self.draw_user:
-                return False, "你的画图请求还没完成呢。"
-            self.draw_user[uid] = True
-
-        result = ""
-        error = ""
-        try:
-            result = (await draw_sd(prompt, nprompt))["images"][0]["url"]
-            self.credit -= 0.03
-        except Exception as ex:
-            error = await error_chat(ex)
-        finally:
-            async with self.image_lock:
-                del self.draw_user[uid]
-        if error:
-            return False, error
-        if not result:
-            return False, "生成失败"
-        return True, result
-
-
-async def convert_gif_to_png_base64(url: str) -> str:
-    """
-    检测并转换GIF图片为PNG格式的base64编码
-
-    Args:
-        url: 图片URL
-
-    Returns:
-        如果是GIF则返回转换后的base64 data URL，否则返回原URL
-    """
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    return url
-
-                # 只读取前6个字节判断是否为GIF
-                header = await response.content.read(6)
-                if len(header) < 6 or header[:3] != b"GIF":
-                    return url
-
-                # 确认是GIF后，重新请求完整内容
-                async with session.get(url) as full_response:
-                    if full_response.status != 200:
-                        return url
-
-                    content = await full_response.read()
-
-                    # 转换为PNG
-                    with Image.open(io.BytesIO(content)) as img:
-                        # 转换为RGBA模式并取第一帧
-                        img = img.convert("RGBA")
-
-                        # 保存为PNG格式
-                        output = io.BytesIO()
-                        img.save(output, format="PNG")
-                        output.seek(0)
-
-                        # 转换为base64
-                        png_data = output.getvalue()
-                        base64_data = base64.b64encode(png_data).decode("utf-8")
-
-                        return f"data:image/png;base64,{base64_data}"
-
-    except Exception as e:
-        print(f"GIF转PNG失败: {e}")
-        return url
-
-    return url

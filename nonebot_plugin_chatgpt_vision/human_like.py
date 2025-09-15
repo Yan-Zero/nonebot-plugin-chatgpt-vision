@@ -6,29 +6,26 @@ import yaml
 import pathlib
 import os
 from datetime import datetime
-from nonebot import on_command, on_notice, on_message, get_plugin_config
+from nonebot import on_command, on_notice, on_message
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
 from nonebot.adapters.onebot.v11.bot import Bot as V11Bot
-from nonebot.adapters.onebot.v11.bot import send
 from nonebot.adapters.onebot.v11.event import NoticeEvent
 from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN
 from nonebot.adapters import Bot
 from nonebot.rule import Rule
-from nonebot.params import CommandArg
 from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
 
-from .config import Config
+from .config import p_config
 from .picsql import randpic
 from .group import GroupRecord
-from .group import RecordSeg
-from .group import CACHE_NAME
+from .record import RecordSeg
+from .utils import USER_NAME_CACHE
 
 
-p_config: Config = get_plugin_config(Config)
 _CONFIG = None
 try:
     if not os.path.exists("data/human"):
@@ -89,13 +86,13 @@ async def parser_msg(msg: str, group: GroupRecord, event: V11G, bot: Bot):
 async def _(bot: Bot, event: V11G, state):
 
     uid = event.get_user_id()
-    if uid not in CACHE_NAME:
+    if uid not in USER_NAME_CACHE:
         user_name = event.sender.nickname
         if not user_name or not user_name.strip():
             user_name = str(event.sender.user_id)[:5]
-        CACHE_NAME[uid] = user_name
+        USER_NAME_CACHE[uid] = user_name
     else:
-        user_name = CACHE_NAME[uid]
+        user_name = USER_NAME_CACHE[uid]
     user_name = user_name.replace("，", ",").replace("。", ".")
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
 
@@ -184,13 +181,13 @@ async def _(bot: V11Bot, event: NoticeEvent):
     if group_id not in GROUP_RECORD:
         return
     uid = str(getattr(event, "user_id", None))
-    name: str = CACHE_NAME.get(uid, "")
+    name: str = USER_NAME_CACHE.get(uid, "")
     if not name.strip():
         name = (await bot.get_stranger_info(user_id=int(uid)))["nickname"]
         name = name.replace("，", ",").replace("。", ".").strip()
         if not name:
             name = uid[:5]
-        CACHE_NAME[uid] = name
+        USER_NAME_CACHE[uid] = name
 
     group: GroupRecord = GROUP_RECORD[group_id]
     if event.notice_type == "group_increase":
@@ -278,61 +275,3 @@ credit = on_command(
 async def _(bot: Bot, event: V11G, state):
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
     await credit.finish(f"剩余额度：{group.credit*7.2: .3f}￥")
-
-
-dall_draw = on_command("画", rule=to_me(), aliases={"draw"})
-
-sd_drawing = on_command(
-    "sd",
-    rule=to_me(),
-    priority=2,
-    block=True,
-)
-
-
-@sd_drawing.handle()
-async def _(bot: V11Bot, event: V11G, arg=CommandArg()):
-    group_id = str(event.group_id)
-    if group_id not in GROUP_RECORD:
-        return
-    group: GroupRecord = GROUP_RECORD[group_id]
-    if not group.draw_enable:
-        await sd_drawing.finish("绘图功能未开启")
-    uid = str(event.user_id)
-    if group.check(uid, datetime.now()):
-        return
-    prompt: str = arg.extract_plain_text().strip()
-    if not prompt:
-        await sd_drawing.finish("请输入内容")
-    p = prompt.split("\n\n")
-    s, u = await group.draw_sd(
-        p[0],
-        p[1] if len(p) > 1 else "",
-        uid,
-    )
-    if s:
-        await send(bot, event=event, message=V11Seg.image(u), reply_message=True)
-    else:
-        await sd_drawing.finish(u)
-
-
-dall_switch = on_command(
-    "开关绘图",
-    aliases={"开启绘图", "关闭绘图"},
-    permission=SUPERUSER | GROUP_ADMIN,
-    priority=2,
-    block=True,
-)
-
-
-@dall_switch.handle()
-async def _(event: V11G):
-    group_id = str(event.group_id)
-    if group_id not in GROUP_RECORD:
-        return
-    group: GroupRecord = GROUP_RECORD[group_id]
-
-    group.draw_enable = not group.draw_enable
-    await dall_switch.finish(
-        "已开启绘图功能" if group.draw_enable else "已关闭绘图功能"
-    )
