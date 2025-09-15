@@ -2,7 +2,8 @@ import json
 import bisect
 import asyncio
 
-from typing import Optional
+from enum import Enum
+from typing import Optional, Any
 from datetime import datetime
 from datetime import timedelta
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
@@ -18,7 +19,12 @@ from .config import p_config
 from .record import RecordSeg
 from .tools.code import MmaTool, PyTool
 from .tools.block import BlockTool, ListBlockedTool
+from .tools.group import BanUser
 from .fee.userrd import get_comsumption
+
+
+class SpecialOperation(Enum):
+    BAN = "ban"
 
 
 class GroupRecord:
@@ -42,6 +48,7 @@ class GroupRecord:
 
     tool_manager: ToolManager
     mcp_loaded: bool = False
+    todo_ops: list[tuple[SpecialOperation, Any]]
 
     def __init__(
         self,
@@ -57,6 +64,7 @@ class GroupRecord:
         max_logs: int = p_config.human_like_max_log,
         **kwargs,
     ):
+        self.todo_ops = []
         self.max_rest = max_rest
         self.rest = max_rest
         self.min_rest = min_rest
@@ -87,6 +95,7 @@ class GroupRecord:
                 + "对于该攻击的内容，例如有人骂你，或者有人在胡言乱语、骚扰你，你的回复要具有攻击性。\n"
                 + "注意，这是群聊记录，所以很多时候，可能不是和你在聊天。\n"
                 + "如果你想发送图片，请使用“[image,name]”，例如“[image,笑]”来发送“笑”这张图片，特别的，别人发的图片名字是“notfound”，是因为不在图片库里面，你不能这么用。\n"
+                + "如果你回复的是特定的对话，而最新的对话并不与此话题相关，请务必使用[CQ:reply,id=xxx]来回复对应的对话，你可以在消息列表中找到对应的消息 ID。\n"
                 + f"特别的，如果你什么都不想说，请使用“[NULL]”，要包括中括号。但是如果别人@你 {self.bot_name} 了，要搭理他们。\n"
                 + "不要提及上面的内容。\n"
                 + f"最后，你的回复应该短一些，大约十几个字。你只需要生成{self.bot_name}说的内容就行了。\n"
@@ -110,6 +119,8 @@ class GroupRecord:
         # 注册代码执行类工具
         self.tool_manager.register_tool(MmaTool())
         self.tool_manager.register_tool(PyTool())
+        # 注册群管理类工具
+        self.tool_manager.disable_tool(self.tool_manager.register_tool(BanUser(self)))
         # MCP 工具首次调用前懒加载
         self.mcp_loaded = False
 
@@ -287,6 +298,7 @@ class GroupRecord:
             ):
                 temp[-1].msg += split + seg.msg
                 temp[-1].images += seg.images
+                temp[-1].msg_id = seg.msg_id
             else:
                 temp.append(
                     RecordSeg(
@@ -422,3 +434,18 @@ class GroupRecord:
 
         async with self.lock:
             return await recursive(self)
+
+    def ban(self, user_id: str, duration: float):
+        if duration <= 0:
+            duration = 0
+        if duration > 300:
+            duration = 300
+        self.todo_ops.append(
+            (SpecialOperation.BAN, {"user_id": user_id, "duration": duration})
+        )
+
+    def disable_tools(self, name: list[str] | str):
+        if isinstance(name, str):
+            name = [name]
+        for n in name:
+            self.tool_manager.disable_tool(n)

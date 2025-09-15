@@ -133,9 +133,9 @@ class RecordSeg:
     def to_str(self, with_title: bool = False):
         ret = ""
         if with_title:
-            ret += f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}]：\n"
+            ret += f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}](MsgId: {self.msg_id})：\n"
         if self.reply:
-            ret += f"Reply to @{self.reply.name}({self.reply.uid})：\n"
+            ret += f"Reply to @{self.reply.name}({self.reply.uid})(MsgId: {self.reply.msg_id})：\n"
             ret += "\n> ".join(self.reply.to_str().split("\n")) + "\n"
         return ret + self.msg.extract_plain_text()
 

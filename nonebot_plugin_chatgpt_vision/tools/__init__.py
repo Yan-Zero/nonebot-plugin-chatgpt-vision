@@ -36,10 +36,18 @@ class Tool(ABC):
 
 
 class ToolManager:
-    def __init__(self):
-        self.tools: Dict[str, Tool] = {}
+    """管理多个工具的注册与调用"""
 
-    def register_tool(self, tool: Tool, name: str | None = None):
+    tools: dict[str, Tool]
+    """工具名称 -> 工具实例"""
+    enable: dict[str, bool]
+    """工具名称 -> 是否启用"""
+
+    def __init__(self):
+        self.tools = {}
+        self.enable = {}
+
+    def register_tool(self, tool: Tool, name: str | None = None) -> str:
         # Backward compatibility: support register_tool(name, tool)
         if isinstance(tool, str) and isinstance(name, Tool):
             import warnings
@@ -53,14 +61,37 @@ class ToolManager:
         if not name:
             name = tool.get_name()
         self.tools[name] = tool
+        self.enable[name] = True
+        return name
 
     def register_tools(self, mapping: Dict[str, Tool]):
         self.tools.update(mapping)
+        for name in mapping:
+            self.enable[name] = True
+
+    def enable_tool(self, name: str):
+        if name in self.tools:
+            self.enable[name] = True
+        else:
+            logger.warning(f"Tool {name} not found to enable")
+
+    def disable_tool(self, name: str):
+        if name in self.tools:
+            self.enable[name] = False
+        else:
+            logger.warning(f"Tool {name} not found to disable")
 
     def get_tools_schema(self) -> List[Dict[str, Any]]:
-        return [tool.get_schema() for tool in self.tools.values()]
+        return [
+            tool.get_schema()
+            for name, tool in self.tools.items()
+            if self.enable.get(name, False)
+        ]
 
     async def execute_tool(self, name: str, **kwargs) -> str:
+        if not self.enable.get(name, False):
+            logger.warning(f"Tool {name} is disabled")
+            return f"工具 {name} 未启用"
         logger.info(f"Executing tool: {name} with args: {kwargs}")
         if name not in self.tools:
             logger.warning(f"Tool {name} not found")

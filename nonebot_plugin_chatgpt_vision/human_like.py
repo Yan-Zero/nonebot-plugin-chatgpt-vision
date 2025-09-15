@@ -6,7 +6,7 @@ import yaml
 import pathlib
 import os
 from datetime import datetime
-from nonebot import on_command, on_notice, on_message
+from nonebot import on_command, on_notice, on_message, logger
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
 from nonebot.adapters.onebot.v11.bot import Bot as V11Bot
@@ -21,9 +21,9 @@ from nonebot.permission import SUPERUSER
 
 from .config import p_config
 from .picsql import randpic
-from .group import GroupRecord
-from .record import RecordSeg
+from .group import GroupRecord, SpecialOperation
 from .utils import USER_NAME_CACHE
+from .record import RecordSeg
 
 
 _CONFIG = None
@@ -83,7 +83,7 @@ async def parser_msg(msg: str, group: GroupRecord, event: V11G, bot: Bot):
 
 
 @humanlike.handle()
-async def _(bot: Bot, event: V11G, state):
+async def _(bot: V11Bot, event: V11G, state):
 
     uid = event.get_user_id()
     if uid not in USER_NAME_CACHE:
@@ -141,8 +141,20 @@ async def _(bot: Bot, event: V11G, state):
                 if s == "[NULL]":
                     continue
                 await humanlike.send(V11Msg(await parser_msg(s, group, event, bot=bot)))
+            for op, value in group.todo_ops:
+                if op == SpecialOperation.BAN:
+                    user_id = value.get("user_id", "")
+                    duration = value.get("duration", 0)
+                    await bot.set_group_ban(
+                        group_id=int(event.group_id),
+                        user_id=int(user_id),
+                        duration=int(duration),
+                    )
+                else:
+                    logger.warning(f"Unknown special operation: {op}")
+            group.todo_ops = []
     except Exception as ex:
-        print(ex)
+        logger.error(ex)
 
     async with group.lock:
         with open(f"./data/human/{event.group_id}.yaml", "w+", encoding="utf-8") as f:
@@ -275,3 +287,42 @@ credit = on_command(
 async def _(bot: Bot, event: V11G, state):
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
     await credit.finish(f"剩余额度：{group.credit*7.2: .3f}￥")
+
+
+tool_manager = on_command(
+    "tool",
+    rule=to_me(),
+    permission=SUPERUSER | GROUP_ADMIN,
+    priority=5,
+    force_whitespace=True,
+    block=True,
+)
+
+
+@tool_manager.handle()
+async def _(bot: Bot, event: V11G, state):
+    group: GroupRecord = GROUP_RECORD[str(event.group_id)]
+    args = str(event.get_message()).strip().split()
+    if len(args) < 2 or args[0] not in ["enable", "disable", "list"]:
+        await tool_manager.finish("用法：tool <enable|disable|list> [工具名]")
+    if args[0] == "list":
+        msg = "已启用的工具：\n"
+        for name, tool in group.tool_manager.tools.items():
+            if group.tool_manager.enable.get(name, False):
+                msg += f"- {name}\n"
+        msg += "未启用的工具：\n"
+        for name, tool in group.tool_manager.tools.items():
+            if not group.tool_manager.enable.get(name, False):
+                msg += f"- {name}\n"
+        await tool_manager.finish(msg)
+    name = args[1]
+    if name not in group.tool_manager.tools:
+        await tool_manager.finish(f"工具 {name} 不存在")
+    if args[0] == "enable":
+        group.tool_manager.enable_tool(name)
+        await tool_manager.finish(f"已启用工具 {name}")
+    elif args[0] == "disable":
+        group.tool_manager.disable_tool(name)
+        await tool_manager.finish(f"已禁用工具 {name}")
+    else:
+        await tool_manager.finish("用法：tool <enable|disable|list> [工具名]")
