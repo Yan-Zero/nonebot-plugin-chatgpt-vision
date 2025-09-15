@@ -134,10 +134,11 @@ class RecordSeg:
         ret = ""
         if with_title:
             ret += f"{self.name}({self.uid})[{self.time.strftime('%Y-%m-%d %H:%M %a')}](MsgId: {self.msg_id})：\n"
-        if self.reply:
+        if self.reply and self.msg_id != 0:
             ret += f"Reply to @{self.reply.name}({self.reply.uid})：\n"
             ret += "\n> ".join(self.reply.to_str().split("\n")) + "\n"
-            ret += f"[CQ:reply,id={self.reply.msg_id}]\n"
+        if self.reply:
+            ret += f"[CQ:reply,id={self.reply.msg_id}]"
         return ret + self.msg.extract_plain_text()
 
     def content(self, with_title: bool = False, image_mode: bool = False) -> list | str:

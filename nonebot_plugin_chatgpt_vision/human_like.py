@@ -137,7 +137,6 @@ async def save_group_record(group_id: str):
 
 @humanlike.handle()
 async def _(bot: V11Bot, event: V11G, state):
-
     uid = event.get_user_id()
     if uid not in USER_NAME_CACHE:
         user_name = event.sender.nickname
@@ -173,16 +172,19 @@ async def _(bot: V11Bot, event: V11G, state):
         return
     if group.last_time + group.cd > datetime.now():
         return True
-    if event.message.extract_plain_text().startswith("/"):
+    if msg.extract_plain_text().startswith("/"):
         return
-    if not event.message.to_rich_text().strip():
+    if not msg.to_rich_text().strip():
         return
 
     group.rest -= 1
     if group.rest > 0:
         if not await to_me()(bot=bot, event=event, state=state):
-            return
-        elif random.random() < 0.02:
+            if group.bot_name not in msg.extract_plain_text():
+                return
+            if random.random() < 0.7:
+                return
+        if random.random() < 0.02:
             return
     group.rest = random.randint(group.min_rest, group.max_rest)
     group.last_time = datetime.now()

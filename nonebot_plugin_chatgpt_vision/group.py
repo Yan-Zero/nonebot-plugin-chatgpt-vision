@@ -230,6 +230,11 @@ class GroupRecord:
                         reply = m
                         break
             msg = msg.exclude("reply")
+        elif reply:
+            for m in self.msgs:
+                if m.msg_id == reply.msg_id:
+                    reply = m
+                    break
 
         bisect.insort(
             self.msgs,
@@ -342,15 +347,6 @@ class GroupRecord:
 
     async def say(self) -> list[str]:
         async def recursive(self: "GroupRecord", recursion_depth: int = 5) -> list[str]:
-            if recursion_depth <= 0:
-                await self.append(
-                    "Recursive Error",
-                    "10002",
-                    "工具递归调用过深，已终止。",
-                    1,
-                    datetime.now(),
-                )
-                return ["[NULL]"]
             try:
                 # 懒加载 MCP 工具
                 if not self.mcp_loaded:
@@ -358,6 +354,15 @@ class GroupRecord:
 
                 # 获取工具schema
                 tools = self.tool_manager.get_tools_schema()
+                if recursion_depth <= 0:
+                    await self.append(
+                        "Recursive Error",
+                        "10002",
+                        "工具递归调用过深，已禁用。",
+                        1,
+                        datetime.now(),
+                    )
+                    tools = None
 
                 # 组装消息
                 messages = self.merge()
