@@ -11,7 +11,7 @@ class BlockTool(Tool):
             "type": "function",
             "function": {
                 "name": "block_user",
-                "description": "屏蔽用户，这个功能是让你看不到用户的消息，但不会阻止用户发送消息。注意，你得告知用户已被屏蔽。",
+                "description": "屏蔽用户，这个功能是让你看不到用户的消息，但不会阻止用户发送消息。",
                 "parameters": {
                     "type": "object",
                     "properties": {

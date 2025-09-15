@@ -5,7 +5,6 @@ from nonebot import get_plugin_config
 from urllib.parse import urljoin
 
 from .config import Config
-from .config import PicData
 
 p_config = get_plugin_config(Config)
 
@@ -21,7 +20,7 @@ else:
 
     async def randpic(
         name: str, group: str = "globe", vector: bool = False
-    ) -> tuple[PicData, str]:
+    ) -> tuple[dict | None, str]:
         try:
             async with aiohttp.ClientSession(
                 headers={
@@ -41,11 +40,11 @@ else:
                 if not images:
                     return None, ""
                 length = len(images)
-                pic = PicData(
-                    name=name,
-                    group=group,
-                    url=images[random.randint(0, min(length - 1, 10))]["data-backup"],
-                )
+                pic = {
+                    "name": name,
+                    "group": group,
+                    "url": images[random.randint(0, min(length - 1, 10))]["data-src"],
+                }
                 return pic, "（随机检索）"
         except Exception:
             return None, ""

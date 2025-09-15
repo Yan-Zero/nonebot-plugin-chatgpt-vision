@@ -7,6 +7,8 @@ import pathlib
 import os
 from datetime import datetime
 from nonebot import on_command, on_notice, on_message, logger
+from nonebot.params import CommandArg
+from nonebot.matcher import Matcher
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
 from nonebot.adapters.onebot.v11.bot import Bot as V11Bot
@@ -74,12 +76,56 @@ async def parser_msg(msg: str, group: GroupRecord, event: V11G, bot: Bot):
         if pic:
             msg = msg.replace(
                 f"[image,{i.group(1)}]",
-                f"[CQ:image,file={pic.url if pic.url.startswith('http') else pathlib.Path(pic.url).absolute().as_uri()}]",
+                f"[CQ:image,file={pic['url'] if pic['url'].startswith('http') else pathlib.Path(pic['url']).absolute().as_uri()}]",
                 1,
             )
         else:
             msg = msg.replace(f"[image,{i.group(1)}]", f"[{i.group(1)} Not Found]")
     return msg
+
+
+async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
+    p = await group.say()
+    async with group.lock:
+        for s in p:
+            if s == "[NULL]":
+                continue
+            await matcher.send(V11Msg(await parser_msg(s, group, event, bot=bot)))
+        if group.todo_ops:
+            for op, value in group.todo_ops:
+                if op == SpecialOperation.BAN:
+                    user_id = value.get("user_id", "")
+                    duration = value.get("duration", 0)
+                    await bot.set_group_ban(
+                        group_id=int(event.group_id),
+                        user_id=int(user_id),
+                        duration=int(duration),
+                    )
+                elif op == SpecialOperation.BLOCK:
+                    await matcher.send(
+                        f"已屏蔽用户 {USER_NAME_CACHE.get(value.get('user_id', ''), '')}（{value.get('user_id', '')}） {value.get('duration', 0)} 秒"
+                    )
+                else:
+                    logger.warning(f"Unknown special operation: {op}")
+            group.todo_ops = []
+
+
+async def save_group_record(group_id: str):
+    group: GroupRecord = GROUP_RECORD[group_id]
+    async with group.lock:
+        with open(f"./data/human/{group_id}.yaml", "w+", encoding="utf-8") as f:
+            yaml.dump(
+                {
+                    group_id: {
+                        "msgs": group.msgs,
+                        "rest": group.rest,
+                        "block_list": group.block_list,
+                        "credit": group.credit,
+                    }
+                },
+                f,
+                allow_unicode=True,
+            )
 
 
 @humanlike.handle()
@@ -135,41 +181,10 @@ async def _(bot: V11Bot, event: V11G, state):
     group.last_time = datetime.now()
 
     try:
-        p = await group.say()
-        async with group.lock:
-            for s in p:
-                if s == "[NULL]":
-                    continue
-                await humanlike.send(V11Msg(await parser_msg(s, group, event, bot=bot)))
-            for op, value in group.todo_ops:
-                if op == SpecialOperation.BAN:
-                    user_id = value.get("user_id", "")
-                    duration = value.get("duration", 0)
-                    await bot.set_group_ban(
-                        group_id=int(event.group_id),
-                        user_id=int(user_id),
-                        duration=int(duration),
-                    )
-                else:
-                    logger.warning(f"Unknown special operation: {op}")
-            group.todo_ops = []
+        await say(group, event, bot, humanlike)
     except Exception as ex:
         logger.error(ex)
-
-    async with group.lock:
-        with open(f"./data/human/{event.group_id}.yaml", "w+", encoding="utf-8") as f:
-            yaml.dump(
-                {
-                    str(event.group_id): {
-                        "msgs": group.msgs,
-                        "rest": group.rest,
-                        "block_list": group.block_list,
-                        "credit": group.credit,
-                    }
-                },
-                f,
-                allow_unicode=True,
-            )
+    await save_group_record(str(event.group_id))
 
 
 async def human_like_on_notice(bot: Bot, event: Event):
@@ -233,29 +248,10 @@ async def _(bot: V11Bot, event: NoticeEvent):
     group.last_time = datetime.now()
 
     try:
-        p = await group.say()
-        async with group.lock:
-            for s in p:
-                if s == "[NULL]":
-                    continue
-                await humanlike.send(V11Msg(await parser_msg(s, group, event, bot=bot)))  # type: ignore
+        await say(group, event, bot, human_notion)
     except Exception as ex:
         print(ex)
-
-    async with group.lock:
-        with open(f"./data/human/{group_id}.yaml", "w+", encoding="utf-8") as f:
-            yaml.dump(
-                {
-                    group_id: {
-                        "msgs": group.msgs,
-                        "rest": group.rest,
-                        "block_list": group.block_list,
-                        "credit": group.credit,
-                    }
-                },
-                f,
-                allow_unicode=True,
-            )
+    await save_group_record(group_id)
 
 
 remake = on_command(
@@ -300,10 +296,10 @@ tool_manager = on_command(
 
 
 @tool_manager.handle()
-async def _(bot: Bot, event: V11G, state):
+async def _(bot: Bot, event: V11G, p=CommandArg()):
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
-    args = str(event.get_message()).strip().split()
-    if len(args) < 2 or args[0] not in ["enable", "disable", "list"]:
+    args: list[str] = p.extract_plain_text().strip().split()
+    if args[0] not in ["enable", "disable", "list"]:
         await tool_manager.finish("用法：tool <enable|disable|list> [工具名]")
     if args[0] == "list":
         msg = "已启用的工具：\n"
@@ -315,6 +311,8 @@ async def _(bot: Bot, event: V11G, state):
             if not group.tool_manager.enable.get(name, False):
                 msg += f"- {name}\n"
         await tool_manager.finish(msg)
+    if len(args) != 2:
+        await tool_manager.finish("用法：tool <enable|disable|list> [工具名]")
     name = args[1]
     if name not in group.tool_manager.tools:
         await tool_manager.finish(f"工具 {name} 不存在")

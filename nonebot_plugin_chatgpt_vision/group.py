@@ -25,6 +25,7 @@ from .fee.userrd import get_comsumption
 
 class SpecialOperation(Enum):
     BAN = "ban"
+    BLOCK = "block"
 
 
 class GroupRecord:
@@ -219,6 +220,17 @@ class GroupRecord:
             return
         if isinstance(msg, str):
             msg = V11Msg(msg)
+            for r in msg.get("reply") or []:
+                if "id" not in r.data:
+                    continue
+                if r.data["id"] == "0":
+                    continue
+                for m in self.msgs:
+                    if m.msg_id == int(r.data["id"]):
+                        reply = m
+                        break
+            msg = msg.exclude("reply")
+
         bisect.insort(
             self.msgs,
             RecordSeg(user_name, user_id, msg, msg_id, time, reply=reply),
@@ -235,6 +247,9 @@ class GroupRecord:
             delta = 150
         self.block_list[id] = datetime.now() + timedelta(
             seconds=max(1, min(delta, 3153600000))
+        )
+        self.todo_ops.append(
+            (SpecialOperation.BLOCK, {"user_id": id, "duration": delta})
         )
 
     def list_blocked(self) -> list[tuple[str, float]]:
