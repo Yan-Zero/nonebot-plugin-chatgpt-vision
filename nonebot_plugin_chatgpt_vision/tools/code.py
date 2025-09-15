@@ -1,5 +1,5 @@
 import asyncio
-import async_tio  # 运行时代码沙箱
+import async_tio
 from typing import Any, Dict, Optional
 
 from . import Tool
@@ -25,7 +25,7 @@ class _TioRunner:
     async def run(self, code: str, timeout: int | float | None = 60) -> str:
         async with async_tio.Tio() as client:
             if self.api_url:
-                client.API_URL = self.api_url
+                client.API_URL = self.api_url  # type: ignore[attr-defined]
             try:
                 coro = client.execute(
                     code, language=self.language, arguments=self.arguments

@@ -11,7 +11,7 @@ try:
                 "api_key": i.get("key"),
                 "base_url": i.get("url"),
             }
-except Exception as ex:
+except Exception:
     pass
 
 p_config: Config = get_plugin_config(Config)
@@ -58,16 +58,6 @@ async def chat(
         return rsp
     except Exception:
         raise
-
-
-async def draw_image(
-    model: str, prompt: str, size: str = "1024x1024", times: int = 3, **kwargs
-):
-    if model not in OPENAI_CONFIG:
-        raise ValueError(f"The model {model} is not supported.")
-    return await AsyncOpenAI(**OPENAI_CONFIG[model]).images.generate(
-        model=model, prompt=prompt, size=size, **kwargs
-    )
 
 
 async def error_chat(

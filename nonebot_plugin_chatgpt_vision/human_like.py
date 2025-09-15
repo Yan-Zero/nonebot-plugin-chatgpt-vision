@@ -6,7 +6,6 @@ import yaml
 import pathlib
 import os
 from datetime import datetime
-from datetime import timedelta
 from nonebot import on_command, on_notice, on_message, get_plugin_config
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
@@ -71,37 +70,8 @@ async def human_like_group(bot: Bot, event: Event) -> bool:
 humanlike = on_message(rule=Rule(human_like_group), priority=1, block=False)
 
 
-async def parser_msg(msg: str, group: GroupRecord, event: Event, bot: Bot):
+async def parser_msg(msg: str, group: GroupRecord, event: V11G, bot: Bot):
     msg = re.sub(r"@(.+?)\((\d+)\)", r"[CQ:at,qq=\2]", msg)
-    for i in re.finditer(r"\[block,(.*?)\((\d+)\)\,\s*(\d+)\]", msg):
-        if not (await GROUP_ADMIN(bot=bot, event=event)):
-            group.block(i.group(2), i.group(3))
-            msg = msg.replace(
-                i.group(0),
-                f"[CQ:at,qq={i.group(2)}] 屏蔽{i.group(3)}秒",
-            )
-        else:
-            msg = msg.replace(
-                i.group(0), f"尝试屏蔽[CQ:at,qq={i.group(2)}]，但是很显然对管理无效。"
-            )
-    for i in re.finditer(r"\[block,(.*?)\((\d+)\)\]", msg):
-        if not (await GROUP_ADMIN(bot=bot, event=event)):
-            group.block(i.group(2))
-            msg = msg.replace(
-                i.group(0),
-                f"[CQ:at,qq={i.group(2)}] 屏蔽{group.delta}秒",
-            )
-        else:
-            msg = msg.replace(
-                i.group(0), f"尝试屏蔽[CQ:at,qq={i.group(2)}]，但是很显然对管理无效。"
-            )
-    for i in re.finditer(r"\[unblock,(.*?)\((\d+)\)\]", msg):
-        group.block(i.group(2), 1)
-    msg = re.sub(
-        r"\[unblock,(.*?)\((\d+)\)\]",
-        r"解除屏蔽[CQ:at,qq=\2]",
-        msg,
-    )
     for i in re.finditer(r"\[image,(.+?)\]", msg):
         pic, _ = await randpic(i.group(1), f"qq_group:{event.group_id}", True)
         if pic:
@@ -133,8 +103,8 @@ async def _(bot: Bot, event: V11G, state):
     reply = None
     if event.reply:
         reply = RecordSeg(
-            name=event.reply.sender.nickname,
-            uid=event.reply.sender.user_id,
+            name=event.reply.sender.nickname or "",
+            uid=str(event.reply.sender.user_id),
             msg=event.reply.message,
             msg_id=event.reply.message_id,
             time=datetime.fromtimestamp(event.reply.time),
@@ -199,8 +169,8 @@ async def human_like_on_notice(bot: Bot, event: Event):
     if not event.notice_type.startswith("group_"):
         return False
     try:
-        group_id = str(event.group_id)
-    except Exception as ex:
+        group_id = str(event.group_id)  # type: ignore
+    except Exception:
         return False
     return group_id in GROUP_RECORD
 
@@ -210,13 +180,13 @@ human_notion = on_notice(rule=Rule(human_like_on_notice))
 
 @human_notion.handle()
 async def _(bot: V11Bot, event: NoticeEvent):
-    group_id = str(event.group_id)
+    group_id = str(getattr(event, "group_id", None))
     if group_id not in GROUP_RECORD:
         return
-    uid = str(event.user_id)
+    uid = str(getattr(event, "user_id", None))
     name: str = CACHE_NAME.get(uid, "")
     if not name.strip():
-        name = (await bot.get_stranger_info(user_id=uid))["nickname"]
+        name = (await bot.get_stranger_info(user_id=int(uid)))["nickname"]
         name = name.replace("，", ",").replace("。", ".").strip()
         if not name:
             name = uid[:5]
@@ -234,12 +204,12 @@ async def _(bot: V11Bot, event: NoticeEvent):
     elif event.notice_type == "group_upload":
         msg = (
             f"@{name}({uid}) 上传了文件\n"
-            + f"文件名字：{event.file.name}\n"
-            + f"文件大小：{event.file.size/1024: .2f} KiB\n"
+            + f"文件名字：{event.file.name}\n"  # type: ignore
+            + f"文件大小：{event.file.size/1024: .2f} KiB\n"  # type: ignore
         )
     elif event.notice_type == "group_recall":
         msg = "[NULL]"
-        group.recall(event.message_id)
+        group.recall(event.message_id)  # type: ignore
     else:
         msg = f"{name}({uid}) 发生了{event.notice_type}"
     await group.append("GroupNotice", "10000", msg, 0, datetime.now())
@@ -259,7 +229,7 @@ async def _(bot: V11Bot, event: NoticeEvent):
             for s in p:
                 if s == "[NULL]":
                     continue
-                await humanlike.send(V11Msg(await parser_msg(s, group, event, bot=bot)))
+                await humanlike.send(V11Msg(await parser_msg(s, group, event, bot=bot)))  # type: ignore
     except Exception as ex:
         print(ex)
 
@@ -312,31 +282,6 @@ async def _(bot: Bot, event: V11G, state):
 
 dall_draw = on_command("画", rule=to_me(), aliases={"draw"})
 
-
-@dall_draw.handle()
-async def _(bot: Bot, event: V11G, arg=CommandArg()):
-    group_id = str(event.group_id)
-    if group_id not in GROUP_RECORD:
-        return
-    group: GroupRecord = GROUP_RECORD[group_id]
-    if not group.draw_enable:
-        await dall_draw.finish("绘图功能未开启")
-    uid = str(event.user_id)
-    if group.check(uid, datetime.now()):
-        return
-    p = arg.extract_plain_text().strip()
-    if not p:
-        await dall_draw.finish("请输入内容")
-    s, u = await group.draw_dall(
-        p,
-        uid,
-    )
-    if s:
-        await send(bot, event=event, message=V11Seg.image(u), reply_message=True)
-    else:
-        await dall_draw.finish(u)
-
-
 sd_drawing = on_command(
     "sd",
     rule=to_me(),
@@ -346,7 +291,7 @@ sd_drawing = on_command(
 
 
 @sd_drawing.handle()
-async def _(bot: Bot, event: V11G, arg=CommandArg()):
+async def _(bot: V11Bot, event: V11G, arg=CommandArg()):
     group_id = str(event.group_id)
     if group_id not in GROUP_RECORD:
         return
@@ -356,10 +301,10 @@ async def _(bot: Bot, event: V11G, arg=CommandArg()):
     uid = str(event.user_id)
     if group.check(uid, datetime.now()):
         return
-    p: str = arg.extract_plain_text().strip()
-    if not p:
+    prompt: str = arg.extract_plain_text().strip()
+    if not prompt:
         await sd_drawing.finish("请输入内容")
-    p = p.split("\n\n")
+    p = prompt.split("\n\n")
     s, u = await group.draw_sd(
         p[0],
         p[1] if len(p) > 1 else "",
