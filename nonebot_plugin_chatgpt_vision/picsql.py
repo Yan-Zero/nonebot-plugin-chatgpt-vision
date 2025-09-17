@@ -8,7 +8,6 @@ from .config import Config
 
 p_config = get_plugin_config(Config)
 
-
 if p_config.image_mode == 0:
     require("nonebot_plugin_savepic")
     from nonebot_plugin_savepic.core.sql import randpic  # type: ignore
@@ -19,7 +18,7 @@ else:
     from urllib.parse import quote
 
     async def randpic(
-        name: str, group: str = "globe", vector: bool = False
+        name: str, group: str = "globe", vector: bool = False, **kwargs
     ) -> tuple[dict | None, str]:
         try:
             async with aiohttp.ClientSession(
@@ -34,18 +33,22 @@ else:
                     return None, ""
                 soup = bs4.BeautifulSoup(await rsp.text(), "html.parser")
                 rp = soup.find("div", class_="random_picture")
-                if not rp:
+                if not rp or not isinstance(rp, bs4.Tag):
                     return None, ""
-                images = rp.find_all("img")
+                images = [img for img in rp.find_all("img") if isinstance(img, bs4.Tag)]
                 if not images:
                     return None, ""
                 length = len(images)
                 pic = {
                     "name": name,
                     "group": group,
-                    "url": images[random.randint(0, min(length - 1, 10))]["data-src"],
+                    "url": images[random.randint(0, min(length - 1, 10))].get(
+                        "data-src", ""
+                    ),
                 }
-                return pic, "（随机检索）"
+                if pic["url"]:
+                    return pic, "（随机检索）"
+                return None, ""
         except Exception:
             return None, ""
 

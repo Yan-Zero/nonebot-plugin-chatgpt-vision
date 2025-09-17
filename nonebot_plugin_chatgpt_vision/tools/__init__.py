@@ -4,7 +4,7 @@ import yaml
 import asyncio
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Any
 from pathlib import Path
 from nonebot import logger
 from fastmcp import Client as FastMCPClient
@@ -17,7 +17,7 @@ from fastmcp.client.transports import (
 
 class Tool(ABC):
     @abstractmethod
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         """返回工具的 JSON Schema"""
         pass
 
@@ -47,24 +47,16 @@ class ToolManager:
         self.tools = {}
         self.enable = {}
 
-    def register_tool(self, tool: Tool, name: str | None = None) -> str:
-        # Backward compatibility: support register_tool(name, tool)
-        if isinstance(tool, str) and isinstance(name, Tool):
-            import warnings
-
-            warnings.warn(
-                "register_tool(name, tool) is deprecated. Use register_tool(tool, name=None) instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            tool, name = name, tool
+    def register_tool(
+        self, tool: Tool, name: str | None = None, default: bool = True
+    ) -> str:
         if not name:
             name = tool.get_name()
         self.tools[name] = tool
-        self.enable[name] = True
+        self.enable[name] = default
         return name
 
-    def register_tools(self, mapping: Dict[str, Tool]):
+    def register_tools(self, mapping: dict[str, Tool]):
         self.tools.update(mapping)
         for name in mapping:
             self.enable[name] = True
@@ -81,7 +73,7 @@ class ToolManager:
         else:
             logger.warning(f"Tool {name} not found to disable")
 
-    def get_tools_schema(self) -> List[Dict[str, Any]]:
+    def get_tools_schema(self) -> list[dict[str, Any]]:
         return [
             tool.get_schema()
             for name, tool in self.tools.items()
@@ -112,12 +104,12 @@ class MCPUnifiedClient:
         self.spec = spec
         self.start_timeout = start_timeout
 
-    async def list_tools(self) -> List[Dict[str, Any]]:
+    async def list_tools(self) -> list[dict[str, Any]]:
         try:
             async with asyncio.timeout(self.start_timeout):
                 async with FastMCPClient(self.spec) as client:  # type: ignore[arg-type]
                     tools = await client.list_tools()
-                    unified: List[Dict[str, Any]] = []
+                    unified: list[dict[str, Any]] = []
                     for t in tools:
                         name = getattr(t, "name", None) or (
                             t.get("name") if isinstance(t, dict) else None
@@ -150,7 +142,7 @@ class MCPUnifiedClient:
         except Exception:
             return []
 
-    async def call_tool(self, name: str, arguments: Dict[str, Any]) -> Any:
+    async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         try:
             async with asyncio.timeout(self.start_timeout):
                 async with FastMCPClient(self.spec) as client:  # type: ignore[arg-type]
@@ -159,7 +151,7 @@ class MCPUnifiedClient:
             return {"error": f"工具 {name} 调用失败", "exception": str(ex)}
 
 
-def _split_cmd(cmd: str) -> List[str]:
+def _split_cmd(cmd: str) -> list[str]:
     import shlex
 
     try:
@@ -170,10 +162,10 @@ def _split_cmd(cmd: str) -> List[str]:
 
 def load_mcp_clients_from_yaml(
     path: str | os.PathLike | None,
-) -> List[MCPUnifiedClient]:
+) -> list[MCPUnifiedClient]:
     """
     从 YAML 文件构建多个 MCP 客户端（统一封装版）。支持：
-    - stdio.commands: ["uvx my-mcp", "python -m server"] -> 使用 StdioTransport
+    - stdio: ["uvx my-mcp", "python -m server"] -> 使用 StdioTransport
     - sse: 列表，元素包含 url 与可选 headers -> 使用 SSETransport（兼容/旧）
     - http: 列表，元素包含 base_url/url、可选 headers -> 使用 StreamableHttpTransport
 
@@ -189,13 +181,15 @@ def load_mcp_clients_from_yaml(
     except Exception:
         return []
 
-    multi: List[MCPUnifiedClient] = []
+    multi: list[MCPUnifiedClient] = []
 
     # stdio
-    stdio_cfg = data.get("stdio") or {}
-    commands: List[str] = []
+    stdio_cfg = data.get("stdio") or []
     if isinstance(stdio_cfg, dict):
-        commands = stdio_cfg.get("commands") or []
+        commands: list[str] = stdio_cfg.get("commands") or []
+    elif isinstance(stdio_cfg, list):
+        commands: list[str] = stdio_cfg
+
     if isinstance(commands, str):
         commands = [commands]
     for cmd in commands:
@@ -249,13 +243,13 @@ class MCPTool(Tool):
         self,
         mcp_client: MCPUnifiedClient,
         tool_name: str,
-        tool_schema: Dict[str, Any],
+        tool_schema: dict[str, Any],
     ):
         self.mcp_client = mcp_client
         self.tool_name = tool_name
         self.tool_schema = tool_schema
 
-    def get_schema(self) -> Dict[str, Any]:
+    def get_schema(self) -> dict[str, Any]:
         return {"type": "function", "function": self.tool_schema}
 
     @staticmethod
@@ -264,7 +258,7 @@ class MCPTool(Tool):
         try:
             # 0) dict 形式且包含 content
             if isinstance(result, dict) and "content" in result:
-                parts: List[str] = []
+                parts: list[str] = []
                 content = result.get("content")
                 if isinstance(content, list):
                     for p in content:
@@ -282,7 +276,7 @@ class MCPTool(Tool):
             # 1) 结果对象形式（如 dataclass，带 content 属性）
             content = getattr(result, "content", None)
             if content is not None:
-                parts: List[str] = []
+                parts: list[str] = []
                 for p in content:
                     # p 可能是对象或 dict
                     text = getattr(p, "text", None)

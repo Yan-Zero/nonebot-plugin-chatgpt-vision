@@ -50,6 +50,7 @@ class GroupRecord:
     tool_manager: ToolManager
     mcp_loaded: bool = False
     todo_ops: list[tuple[SpecialOperation, Any]]
+    default_tools: list[str] = []
 
     def __init__(
         self,
@@ -63,6 +64,7 @@ class GroupRecord:
         split: Optional[list[str]] = None,
         inline_content: Optional[dict[str, str]] = None,
         max_logs: int = p_config.human_like_max_log,
+        default_tools: Optional[list[str]] = None,
         **kwargs,
     ):
         self.todo_ops = []
@@ -106,6 +108,17 @@ class GroupRecord:
         self.remake()
         self.lock = asyncio.Lock()
 
+        if default_tools is not None:
+            self.default_tools = default_tools
+        else:
+            self.default_tools = [
+                "run_mma",
+                "run_python",
+                "block_user",
+                "list_blocked_users",
+                "ban_user",
+            ]
+
         self.maxlog = max_logs
         self.set(**kwargs)
 
@@ -115,13 +128,23 @@ class GroupRecord:
     def _setup_tools(self):
         """设置工具（本地+搜索器），MCP 工具首次调用前懒加载"""
         # 注册屏蔽用户类工具
-        self.tool_manager.register_tool(BlockTool(self))
-        self.tool_manager.register_tool(ListBlockedTool(self))
+        self.tool_manager.register_tool(
+            BlockTool(self), default="block_user" in self.default_tools
+        )
+        self.tool_manager.register_tool(
+            ListBlockedTool(self), default="list_blocked_users" in self.default_tools
+        )
         # 注册代码执行类工具
-        self.tool_manager.register_tool(MmaTool())
-        self.tool_manager.register_tool(PyTool())
+        self.tool_manager.register_tool(
+            MmaTool(), default="run_mma" in self.default_tools
+        )
+        self.tool_manager.register_tool(
+            PyTool(), default="run_python" in self.default_tools
+        )
         # 注册群管理类工具
-        self.tool_manager.disable_tool(self.tool_manager.register_tool(BanUser(self)))
+        self.tool_manager.register_tool(
+            BanUser(self), default="ban_user" in self.default_tools
+        )
         # MCP 工具首次调用前懒加载
         self.mcp_loaded = False
 
@@ -141,7 +164,10 @@ class GroupRecord:
             for c in multi:
                 tools = await c.list_tools()
                 for t in tools:
-                    self.tool_manager.register_tool(MCPTool(c, t["name"], t["schema"]))
+                    self.tool_manager.register_tool(
+                        MCPTool(c, t["name"], t["schema"]),
+                        default=t["name"] in self.default_tools,
+                    )
         except Exception:
             pass
         self.mcp_loaded = True
@@ -253,6 +279,12 @@ class GroupRecord:
         self.block_list[id] = datetime.now() + timedelta(
             seconds=max(1, min(delta, 3153600000))
         )
+        for p, v in self.todo_ops:
+            if p != SpecialOperation.BLOCK:
+                continue
+            if v["user_id"] == id:
+                v["duration"] = delta
+                return
         self.todo_ops.append(
             (SpecialOperation.BLOCK, {"user_id": id, "duration": delta})
         )

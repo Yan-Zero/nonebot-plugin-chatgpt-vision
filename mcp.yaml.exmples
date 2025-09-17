@@ -1,12 +1,10 @@
 ﻿# MCP 多源配置模板（按需启用任意段）
 # 支持三种传输：stdio（本地命令）、SSE（服务端推送）与可流式 HTTP。
 
-# 1) 通过 mcp[cli] 启动的本地 MCP（stdio）
-# 需要先安装：pip install "mcp[cli]"
+# 1) 通过 fastmcp 启动的本地 MCP（stdio）
 # stdio:
-#   commands:
-#     - uvx your-mcp-server
-#     - python -m your_mcp_module
+#   - uvx your-mcp-server
+#   - python -m your_mcp_module
 
 # 2) 通过 SSE 直连远端 MCP 服务
 # sse:

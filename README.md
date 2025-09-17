@@ -9,8 +9,6 @@
 简要介绍：
 
 - 群聊“拟人”模式（Human Like），支持图片引用、屏蔽、工具调用（可选 MCP）。
-- 普通对话命令，支持 LaTeX 渲染、上下文管理与额度控制。
-- 可选 DALL·E 3 与 SD 绘图能力。
 
 ## 安装
 
@@ -60,6 +58,7 @@
 | mcp_config_file | str | configs/chatgpt-vision/mcp.yaml | MCP 配置文件路径（唯一入口） |
 
 说明：
+
 - 仅当你需要通过 MCP 使用外部工具时，才需要开启 `mcp_enabled`。
 - 如果使用 stdio 模式，需要安装 mcp[cli]（`pip install mcp[cli]`）。仅使用 HTTP 模式时无需安装。
 
@@ -70,11 +69,9 @@
 支持同时配置“stdio”（本地命令启动的 MCP）与“http”（HTTP 服务）多源，插件会自动聚合并去重工具：
 
 ```yaml
-# stdio：通过 mcp[cli] 启动的本地 MCP 服务（可选）
 stdio:
-  commands:
-    - uvx your-mcp-server
-    - python -m your_mcp_module
+  - uvx your-mcp-server
+  - python -m your_mcp_module
 
 # http：一个或多个 HTTP MCP 服务（可选）
 http:
@@ -90,6 +87,7 @@ http:
 ```
 
 行为说明：
+
 - 聚合器会合并所有源的工具，并按工具名去重。
 - 调用工具时会按配置顺序逐源尝试，谁先成功用谁。
 - YAML 任一段缺省都不会报错（例如仅 stdio 或仅 http）。
@@ -110,6 +108,7 @@ http:
 ```
 
 说明：
+
 - 支持任意 OpenAI 兼容网关，按模型名区分路由。
 - 程序按“模型名 -> (key, base_url)”进行请求，未找到时回退到 `fallback_model`。
 
@@ -160,12 +159,6 @@ http:
   # image_mode: 1
   # searcher: "duckduckgo"  # 如启用内置搜索工具
 ```
-
-## 迁移指南（MCP 配置变更）
-
-- 移除 .env 中旧的 MCP 配置项：`mcp_commands`、`mcp_server_url`、`mcp_tools_endpoint`、`mcp_call_endpoint`、`mcp_auth_header_name`、`mcp_auth_header_value`。
-- 统一改为在 `mcp_config_file` 指定的 YAML 中配置 MCP 源（见上文示例）。
-- 仅使用 HTTP 模式时，不需要安装 mcp[cli]；需要 stdio 模式时请安装：`pip install mcp[cli]`。
 
 ## 常见问题
 
