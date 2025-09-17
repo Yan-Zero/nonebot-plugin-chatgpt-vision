@@ -1,7 +1,4 @@
-"""模仿人类发言的模式"""
-
 import random
-import re
 import yaml
 import pathlib
 import os
@@ -25,15 +22,15 @@ from .config import p_config
 from .picsql import randpic
 from .group import GroupRecord, SpecialOperation
 from .utils import USER_NAME_CACHE
-from .record import RecordSeg
+from .record import RecordSeg, RecordList, xml_to_v11msg, v11msg_to_xml
 
 
-_CONFIG = None
+_CONFIG: dict = {}
 try:
     if not os.path.exists("data/human"):
         os.mkdir("data/human")
     with open("configs/chatgpt-vision/human.yaml", "r", encoding="utf-8") as f:
-        _CONFIG = yaml.safe_load(f) or {}
+        _CONFIG = yaml.safe_load(f) or {}  # type: ignore
 except Exception:
     _CONFIG = {}
 
@@ -44,11 +41,11 @@ for v in p_config.human_like_group:
 try:
     for files in pathlib.Path("./data/human").glob("*.yaml"):
         with open(files, "r", encoding="utf-8") as f:
-            data = yaml.load(f, yaml.UnsafeLoader)
+            data: dict = yaml.load(f, yaml.UnsafeLoader)  # type: ignore
             for k in data:
                 if k not in GROUP_RECORD:
                     GROUP_RECORD[k] = GroupRecord(**_CONFIG.get(k, {}))
-                GROUP_RECORD[k].msgs = data[k].get("msgs", [])
+                GROUP_RECORD[k].msgs = data[k].get("msgs", RecordList())
                 GROUP_RECORD[k].rest = data[k].get("rest", 100)
                 GROUP_RECORD[k].block_list = data[k].get("block_list", {})
                 GROUP_RECORD[k].credit = data[k].get("credit", 1)
@@ -69,52 +66,56 @@ async def human_like_group(bot: Bot, event: Event) -> bool:
 humanlike = on_message(rule=Rule(human_like_group), priority=1, block=False)
 
 
-async def parser_msg(msg: str, group: GroupRecord, event: V11G, bot: Bot):
-    msg = re.sub(r"@(.+?)\((\d+)\)", r"[CQ:at,qq=\2]", msg)
-    for i in re.finditer(r"\[image,(.+?)\]", msg):
-        pic, _ = await randpic(i.group(1), f"qq_group:{event.group_id}", True)
-        if pic:
-            if not isinstance(pic, dict):
-                pic = {
-                    "url": getattr(pic, "url", ""),
-                    "name": getattr(pic, "name", ""),
-                    "group": getattr(pic, "group", ""),
-                }
-            msg = msg.replace(
-                f"[image,{i.group(1)}]",
-                f"[CQ:image,file={pic['url'] if pic['url'].startswith('http') else pathlib.Path(pic['url']).absolute().as_uri()}]",
-                1,
-            )
-        else:
-            msg = msg.replace(f"[image,{i.group(1)}]", f"[{i.group(1)} Not Found]")
-
-    return msg
-
-
 async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
-    p = await group.say()
-    async with group.lock:
-        for s in p:
-            if s == "[NULL]":
+    async def convert_image(msg: V11Msg) -> V11Msg:
+        for seg in msg:
+            if seg.type != "image":
                 continue
-            await matcher.send(V11Msg(await parser_msg(s, group, event, bot=bot)))
-        if group.todo_ops:
-            for op, value in group.todo_ops:
-                if op == SpecialOperation.BAN:
-                    user_id = value.get("user_id", "")
-                    duration = value.get("duration", 0)
-                    await bot.set_group_ban(
-                        group_id=int(event.group_id),
-                        user_id=int(user_id),
-                        duration=int(duration),
-                    )
-                elif op == SpecialOperation.BLOCK:
-                    await matcher.send(
-                        f"已屏蔽用户 {USER_NAME_CACHE.get(value.get('user_id', ''), '')}（{value.get('user_id', '')}） {value.get('duration', 0)} 秒"
-                    )
-                else:
-                    logger.warning(f"Unknown special operation: {op}")
-            group.todo_ops = []
+            name = seg.data.get("file", "")
+            if not name.startswith("FOUND://"):
+                continue
+            name = name[8:]
+            pic, _ = await randpic(name, f"qq_group:{event.group_id}", True)
+            if pic:
+                if not isinstance(pic, dict):
+                    pic = {
+                        "url": getattr(pic, "url", ""),
+                        "name": getattr(pic, "name", ""),
+                        "group": getattr(pic, "group", ""),
+                    }
+                seg.data["file"] = (
+                    pic["url"]
+                    if pic["url"].startswith("http")
+                    else pathlib.Path(pic["url"]).absolute().as_uri()
+                )
+            else:
+                seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"
+        return msg
+
+    async for s in group.say():
+        if not s.strip():
+            continue
+        for p in xml_to_v11msg(s):
+            await matcher.send(await convert_image(p))
+    if not group.todo_ops:
+        return
+    async with group.lock:
+        for op, value in group.todo_ops:
+            if op == SpecialOperation.BAN:
+                user_id = value.get("user_id", "")
+                duration = value.get("duration", 0)
+                await bot.set_group_ban(
+                    group_id=int(event.group_id),
+                    user_id=int(user_id),
+                    duration=int(duration),
+                )
+            elif op == SpecialOperation.BLOCK:
+                await matcher.send(
+                    f"已屏蔽用户 {USER_NAME_CACHE.get(value.get('user_id', ''), '')}（{value.get('user_id', '')}） {value.get('duration', 0)} 秒"
+                )
+            else:
+                logger.warning(f"Unknown special operation: {op}")
+        group.todo_ops = []
 
 
 async def save_group_record(group_id: str):
@@ -148,33 +149,46 @@ async def _(bot: V11Bot, event: V11G, state):
     user_name = user_name.replace("，", ",").replace("。", ".")
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
 
-    msg = event.message
     reply = None
     if event.reply:
+        msg, imgs = v11msg_to_xml(event.reply.message, str(event.reply.message_id))
         reply = RecordSeg(
             name=event.reply.sender.nickname or "",
             uid=str(event.reply.sender.user_id),
-            msg=event.reply.message,
+            msg=msg,
             msg_id=event.reply.message_id,
             time=datetime.fromtimestamp(event.reply.time),
+            images=imgs,
         )
+    msg = event.message
     if (
         await to_me()(bot=bot, event=event, state=state)
-        and not event.message.to_rich_text().strip()
+        and not msg.to_rich_text().strip()
     ):
         msg += V11Seg.at(group.bot_id)
-    await group.append(
-        user_name, uid, msg, event.message_id, datetime.now(), reply=reply
-    )
     if group.check(uid, datetime.now()):
         return
+    if not msg.to_rich_text().strip():
+        return
+
+    _msg, imgs = v11msg_to_xml(msg, str(event.message_id))
+    await group.append(
+        # user_name, uid, msg, event.message_id, datetime.now(), reply=reply
+        RecordSeg(
+            name=user_name,
+            uid=uid,
+            msg=_msg,
+            msg_id=event.message_id,
+            time=datetime.fromtimestamp(event.time),
+            images=imgs,
+            reply=reply,
+        )
+    )
     if group.lock.locked():
         return
     if group.last_time + group.cd > datetime.now():
         return True
     if msg.extract_plain_text().startswith("/"):
-        return
-    if not msg.to_rich_text().strip():
         return
 
     group.rest -= 1
@@ -227,32 +241,41 @@ async def _(bot: V11Bot, event: NoticeEvent):
 
     group: GroupRecord = GROUP_RECORD[group_id]
     if event.notice_type == "group_increase":
-        msg = f"@{name}({uid}) 加入了群聊"
+        msg = V11Msg([V11Seg.at(uid), V11Seg.text(" 欢迎加入群聊！")])
     elif event.notice_type == "group_decrease":
-        msg = f"@{name}({uid}) 离开了群聊"
+        msg = V11Msg([V11Seg.at(uid), V11Seg.text(" 离开了群聊")])
     elif event.notice_type == "group_admin":
-        msg = f"@{name}({uid}) 成为管理员"
+        msg = V11Msg([V11Seg.at(uid), V11Seg.text(" 成为管理员")])
     elif event.notice_type == "group_ban":
-        msg = f"@{name}({uid}) 被禁言"
+        msg = V11Msg([V11Seg.at(uid), V11Seg.text(" 被禁言")])
     elif event.notice_type == "group_upload":
-        msg = (
-            f"@{name}({uid}) 上传了文件\n"
-            + f"文件名字：{event.file.name}\n"  # type: ignore
-            + f"文件大小：{event.file.size/1024: .2f} KiB\n"  # type: ignore
+        msg = V11Msg(
+            [
+                V11Seg.at(uid),
+                V11Seg.text(" 上传了文件\n"),
+                V11Seg.text(f"文件名字：{event.file.name}\n"),  # type: ignore
+                V11Seg.text(f"文件大小：{event.file.size/1024: .2f} KiB\n"),  # type: ignore
+            ]
         )
     elif event.notice_type == "group_recall":
-        msg = "[NULL]"
         group.recall(event.message_id)  # type: ignore
-    else:
-        msg = f"{name}({uid}) 发生了{event.notice_type}"
-    await group.append("GroupNotice", "10000", msg, 0, datetime.now())
-
-    if group.check("10000", datetime.now()):
         return
-    group.rest -= 1
-    if group.rest > 0:
-        if event.notice_type != "group_increase":
-            return
+    else:
+        msg = V11Msg([V11Seg.text(f"{name}({uid}) 发生了{event.notice_type}")])
+    msg, imgs = v11msg_to_xml(msg, None)
+    await group.append(
+        RecordSeg(
+            name="GroupNotice",
+            uid="10000",
+            msg=msg,
+            msg_id=0,
+            time=datetime.fromtimestamp(event.time),
+        )
+    )
+
+    if event.notice_type != "group_increase":
+        return
+
     group.rest = random.randint(group.min_rest, group.max_rest)
     group.last_time = datetime.now()
 

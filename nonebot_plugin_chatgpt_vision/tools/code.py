@@ -57,7 +57,7 @@ class MmaTool(Tool):
             "type": "function",
             "function": {
                 "name": "run_mma",
-                "description": "执行短小的 Mathematica (Wolfram Language) 代码并返回文本输出。不支持图形返回。",
+                "description": "执行 Mathematica (Wolfram Language) 代码并返回文本输出。不支持图形返回。",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -101,7 +101,7 @@ class PyTool(Tool):
             "type": "function",
             "function": {
                 "name": "run_python",
-                "description": """执行短小的 Python3 代码，环境为线上沙箱，版本为3.6.2 (default, Jul 19 2017, 13:09:21) [GCC 7.1.1 20170622 (Red Hat 7.1.1-3)]。
+                "description": """执行 Python3 代码，环境为线上沙箱，版本为3.6.2 (default, Jul 19 2017, 13:09:21) [GCC 7.1.1 20170622 (Red Hat 7.1.1-3)]。
 可以访问网络，但不支持交互式输入。""",
                 "parameters": {
                     "type": "object",

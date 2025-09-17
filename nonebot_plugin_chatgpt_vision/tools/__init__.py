@@ -176,8 +176,9 @@ def load_mcp_clients_from_yaml(
     p = Path(path)
     if not p.exists():
         return []
+    data = {}
     try:
-        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        data: dict = yaml.safe_load(p.read_text(encoding="utf-8"))  # type: ignore[var-annotated]
     except Exception:
         return []
 
