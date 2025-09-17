@@ -40,7 +40,7 @@ class GroupRecord:
     min_rest: int
     cd: timedelta
     inline_content: dict[str, str]
-    maxlog: int
+    max_logs: int
     credit: float = 1
     image_mode: int = 0
 
@@ -117,7 +117,7 @@ class GroupRecord:
                 "ban_user",
             ]
 
-        self.maxlog = max_logs
+        self.max_logs = max_logs
         self.set(**kwargs)
 
         self.tool_manager = ToolManager()
@@ -335,6 +335,8 @@ class GroupRecord:
                 content = ""
                 if getattr(choice.message, "content", None):
                     content = choice.message.content.replace("[NULL]", "")
+                    if content and "<p>" not in content:
+                        content = f"<p>{content}</p>"
                     record_msg: list[tuple[str, str]] = [
                         (
                             "content",
@@ -346,7 +348,7 @@ class GroupRecord:
                             ),
                         )
                     ]
-                    yield choice.message.content
+                    yield content
 
                 # 检查是否有工具调用
                 if getattr(choice.message, "tool_calls", None):
@@ -360,11 +362,11 @@ class GroupRecord:
                             ),
                         )
                     )
-                    record = RecordSeg(
-                        self.bot_name, self.bot_id, "", 0, datetime.now()
-                    )
-                    record.msg = record_msg
-                    await self.append(record)
+                record = RecordSeg(self.bot_name, self.bot_id, "", 0, datetime.now())
+                record.msg = record_msg
+                await self.append(record)
+
+                if getattr(choice.message, "tool_calls", None):
                     for tool_call in choice.message.tool_calls:
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)

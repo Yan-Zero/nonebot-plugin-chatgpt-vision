@@ -16,9 +16,6 @@ from .utils import QFACE
 from .picsql import upload_image
 
 
-PARSER = etree.XMLParser(resolve_entities=False, no_network=True)
-
-
 async def convert_gif_to_png_base64(url: str) -> str:
     """
     检测并转换GIF图片为PNG格式的base64编码
@@ -82,7 +79,7 @@ def v11msg_to_xml(msg: V11Msg, msg_id: str | None) -> tuple[str, list]:
         if seg.type == "text":
             ret += seg.data["text"]
         elif seg.type == "at":
-            ret += f'<mention id="{seg.data["id"]}">{seg.data["name"]}</mention>'
+            ret += f'<mention uid="{seg.data["qq"]}">{seg.data["name"]}</mention>'
         elif seg.type == "reply":
             ret += f'<reply id="{seg.data["id"]}"/>'
         elif seg.type == "face":
@@ -106,7 +103,7 @@ class RecordSeg:
     """富文本 XML 消息，或yaml存储的内容
 
     Example:
-    <p msgid="1234567890">你好<mention id="123456789">苦咖啡</mention>！</p>
+    <p msgid="1234567890">你好<mention uid="123456789">苦咖啡</mention>！</p>
 
     解析后为 V11Msg([V11Seg.text("你好"), V11Seg.at(123456789, "苦咖啡"), V11Seg.text("！")])
     """
@@ -128,7 +125,7 @@ class RecordSeg:
         if images:
             self.images = images
         else:
-            self.images = ["FETCH?"]
+            self.images = []
         self.name = name
         self.uid = uid
         self.msg = []
@@ -204,11 +201,9 @@ class RecordSeg:
             return
         if not self.images:
             return
-        if self.images[0] != "FETCH?":
-            return
         for i in range(len(self.images)):
             url = self.images[i]
-            if url == "FETCH?":
+            if not url.startswith("https://multimedia.nt.qq.com.cn"):
                 continue
             # 处理GIF转PNG
             url = await convert_gif_to_png_base64(url)
@@ -216,7 +211,6 @@ class RecordSeg:
             if not url.startswith("data:"):
                 url = await upload_image(url)
             self.images[i] = url
-        self.images.pop(0)
 
 
 class RecordList:
@@ -225,6 +219,8 @@ class RecordList:
     """是否合并相同用户的连续消息"""
 
     def __init__(self, merge: bool = True, records: list[RecordSeg] = []):
+        if not records:
+            records = []
         self.records = records
         self.merge = merge
 
@@ -235,7 +231,7 @@ class RecordList:
             self.records.insert(index, record)
             return
         # 如果有引用消息，不合并
-        if not record.reply:
+        if record.reply:
             self.records.insert(index, record)
             return
         # 工具不需要合并
@@ -314,15 +310,16 @@ class RecordList:
 
 XML_PROMPT = """Here is a message in XML format. The message may contain text, mentions, replies, and images.
 <p> tags represent paragraphs of text.
-<mention> tags represent mentions of users, with an "id" attribute for the user ID and the text content being the user's name.
-<reply> tags represent replies to other messages, with an "id" attribute for the message ID being replied to.
+<mention> tags represent mentions of users, with an "uid" attribute for the user ID and the text content being the user's name.
+<reply> tags represent replies to other messages, with an "id" attribute for the message ID being replied to。注意，reply标签是自闭合的，没有内容。一个p tag内只能有一个reply标签，且必须在最前面。
 <image> tags represent images, with a "name" attribute for the image name.
 
 你的回复应该类似于：
-<p>这是真的吗？<mention id="114514"/></p>
+<p><reply id="-1696903780"/>这是真的吗？<mention uid="114514"/></p>
 <p><image name="笑"/></p>
 
 我们一般推荐多分段，因为单段如果太长容易造成他人阅读困难等。记得你的回复需要正确转义 XML 相关的符号。
+注意，<p>标签外的内容会被忽略，也就是说一切内容都必须放在<p>标签内，并且p tag不允许嵌套。
 
 """
 
@@ -338,7 +335,10 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
         转换后的 OneBot V11 消息对象
     """
     try:
-        root = etree.fromstring(f"<root>{xml}</root>", parser=PARSER)
+        root = etree.fromstring(
+            f"<root>{xml}</root>",
+            parser=etree.XMLParser(resolve_entities=False, no_network=True),
+        )
     except etree.XMLSyntaxError:
         yield V11Msg([V11Seg.text(xml)])
         return
@@ -346,33 +346,31 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
     def _segments_from_p(p) -> list[V11Seg]:
         """把一个 <p> 元素转换为 V11 段列表"""
         segments: list[V11Seg] = []
+
         if p.text:
             segments.append(V11Seg.text(p.text))
-
         for sub in p:
             if sub.tag == "mention":
-                uid = int(sub.get("id", "10001"))
+                uid = int(sub.get("uid", "10001"))
                 segments.append(V11Seg.at(uid))
                 if sub.tail:
                     segments.append(V11Seg.text(sub.tail))
-
             elif sub.tag == "reply":
                 mid = int(sub.get("id", "0"))
                 segments.append(V11Seg.reply(mid))
+                if sub.text:
+                    segments.append(V11Seg.text(sub.text))
                 if sub.tail:
                     segments.append(V11Seg.text(sub.tail))
-
             elif sub.tag == "image":
                 name = sub.get("name", "image")
                 segments.append(V11Seg.image(file=f"FOUND://{name}"))
                 if sub.tail:
                     segments.append(V11Seg.text(sub.tail))
-
             elif sub.tag in {"time", "name", "uid"}:
                 # 标签本身忽略，仅拼接其后续文本
                 if sub.tail:
                     segments.append(V11Seg.text(sub.tail))
-
             else:
                 # 未知子标签整体当作文本
                 segments.append(V11Seg.text(etree.tostring(sub, encoding="unicode")))
