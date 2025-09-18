@@ -79,7 +79,10 @@ def v11msg_to_xml(msg: V11Msg, msg_id: str | None) -> tuple[str, list]:
         if seg.type == "text":
             ret += seg.data["text"]
         elif seg.type == "at":
-            ret += f'<mention uid="{seg.data["qq"]}">{seg.data["name"]}</mention>'
+            if "name" in seg.data:
+                ret += f'<mention uid="{seg.data["qq"]}">{seg.data["name"]}</mention>'
+            else:
+                ret += f'<mention uid="{seg.data["qq"]}"/>'
         elif seg.type == "reply":
             ret += f'<reply id="{seg.data["id"]}"/>'
         elif seg.type == "face":
@@ -205,6 +208,8 @@ class RecordSeg:
             url = self.images[i]
             if not url.startswith("https://multimedia.nt.qq.com.cn"):
                 continue
+            if not url.startswith("http://multimedia.nt.qq.com.cn"):
+                continue
             # 处理GIF转PNG
             url = await convert_gif_to_png_base64(url)
             # 如果不是base64格式，继续原来的上传逻辑
@@ -312,7 +317,7 @@ XML_PROMPT = """Here is a message in XML format. The message may contain text, m
 <p> tags represent paragraphs of text.
 <mention> tags represent mentions of users, with an "uid" attribute for the user ID and the text content being the user's name.
 <reply> tags represent replies to other messages, with an "id" attribute for the message ID being replied to。注意，reply标签是自闭合的，没有内容。一个p tag内只能有一个reply标签，且必须在最前面。
-<image> tags represent images, with a "name" attribute for the image name.
+<image> tags represent images, with a "name" attribute for the image name. 另外，image标签也是自闭合的，没有内容。如果你想发的是互联网上的照片，则请设定 url 属性，属性值为图片的 URL，例如<image url="https://example.com/image.png"/>。
 
 你的回复应该类似于：
 <p><reply id="-1696903780"/>这是真的吗？<mention uid="114514"/></p>
@@ -363,8 +368,12 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
                 if sub.tail:
                     segments.append(V11Seg.text(sub.tail))
             elif sub.tag == "image":
-                name = sub.get("name", "image")
-                segments.append(V11Seg.image(file=f"FOUND://{name}"))
+                name = sub.get("name", None)
+                url = sub.get("url", None)
+                if url and url.startswith("http"):
+                    segments.append(V11Seg.image(file=url))
+                elif name:
+                    segments.append(V11Seg.image(file=f"FOUND://{name}"))
                 if sub.tail:
                     segments.append(V11Seg.text(sub.tail))
             elif sub.tag in {"time", "name", "uid"}:

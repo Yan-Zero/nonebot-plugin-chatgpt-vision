@@ -4,6 +4,7 @@ import asyncio
 
 from enum import Enum
 from typing import Optional, Any, AsyncIterator
+from nonebot import logger
 from datetime import datetime
 from datetime import timedelta
 
@@ -333,11 +334,16 @@ class GroupRecord:
 
                 choice = msg.choices[0]
                 content = ""
+                record_msg: list[tuple[str, str]] = []
                 if getattr(choice.message, "content", None):
                     content = choice.message.content.replace("[NULL]", "")
                     if content and "<p>" not in content:
                         content = f"<p>{content}</p>"
-                    record_msg: list[tuple[str, str]] = [
+                    else:
+                        content = content.strip()
+                    if "<br/>" in content:
+                        content = content.replace("<br/>", "\n")
+                    record_msg.append(
                         (
                             "content",
                             str(
@@ -347,7 +353,7 @@ class GroupRecord:
                                 )
                             ),
                         )
-                    ]
+                    )
                     yield content
 
                 # 检查是否有工具调用
@@ -357,7 +363,8 @@ class GroupRecord:
                             "tool_calls",
                             str(
                                 yaml.safe_dump(
-                                    choice.message.tool_calls, allow_unicode=True
+                                    choice.message.model_dump()["tool_calls"],
+                                    allow_unicode=True,
                                 )
                             ),
                         )
@@ -392,8 +399,9 @@ class GroupRecord:
                     async for i in recursive(self, recursion_depth - 1):
                         yield i
             except Exception as ex:
+                logger.error(ex)
                 self.remake()
-                yield (await error_chat(ex) + "上下文莫得了哦。")
+                yield f"<p>发生错误：{await error_chat(ex)}上下文莫得了哦。</p>"
                 return
 
         async with self.lock:
