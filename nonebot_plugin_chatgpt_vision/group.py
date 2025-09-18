@@ -15,6 +15,7 @@ from .tools import (
     MCPTool,
     load_mcp_clients_from_yaml,
 )
+from .utils import fix_xml
 from .config import p_config
 from .record import RecordSeg, RecordList, XML_PROMPT
 from .tools.code import MmaTool, PyTool
@@ -336,12 +337,7 @@ class GroupRecord:
                 record_msg: list[tuple[str, str]] = []
                 if getattr(choice.message, "content", None):
                     content = choice.message.content.replace("[NULL]", "")
-                    if content and "<p>" not in content:
-                        content = f"<p>{content}</p>"
-                    else:
-                        content = content.strip()
-                    if "<br/>" in content:
-                        content = content.replace("<br/>", "\n")
+                    content = fix_xml(content)
                     record_msg.append(
                         (
                             "content",
@@ -400,7 +396,7 @@ class GroupRecord:
             except Exception as ex:
                 logger.error(ex)
                 self.remake()
-                yield f"<p>发生错误：{await error_chat(ex)}上下文莫得了哦。</p>"
+                yield fix_xml(f"发生错误：{await error_chat(ex)}上下文莫得了哦。")
                 return
 
         async with self.lock:
