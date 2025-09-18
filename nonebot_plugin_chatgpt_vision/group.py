@@ -242,23 +242,25 @@ class GroupRecord:
         if len(self.msgs) > self.max_logs:
             self.msgs.pop(0)
 
-    def block(self, id: str, delta: Optional[float] = None):
+    def block(self, id: str, delta: Optional[float] = None) -> float:
         try:
             delta = float(delta or 0)
         except Exception:
             delta = 150
-        self.block_list[id] = datetime.now() + timedelta(
-            seconds=max(1, min(delta, 3153600000))
-        )
+        if id in self.block_list and self.block_list[id] > datetime.now():
+            delta += (self.block_list[id] - datetime.now()).total_seconds()
+        delta = max(1, min(delta, 3153600000))
+        self.block_list[id] = datetime.now() + timedelta(seconds=delta)
         for p, v in self.todo_ops:
             if p != SpecialOperation.BLOCK:
                 continue
             if v["user_id"] == id:
                 v["duration"] = delta
-                return
+                return delta
         self.todo_ops.append(
             (SpecialOperation.BLOCK, {"user_id": id, "duration": delta})
         )
+        return delta
 
     def list_blocked(self) -> list[tuple[str, float]]:
         ret = []

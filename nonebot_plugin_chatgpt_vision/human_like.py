@@ -110,9 +110,25 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                     duration=int(duration),
                 )
             elif op == SpecialOperation.BLOCK:
-                await matcher.send(
-                    f"已屏蔽用户 {USER_NAME_CACHE.get(value.get('user_id', ''), '')}（{value.get('user_id', '')}） {value.get('duration', 0)} 秒"
-                )
+                if value.get("duration", 0) <= 0:
+                    await matcher.send(
+                        V11Msg(
+                            [
+                                V11Seg.text("已取消屏蔽"),
+                                V11Seg.at(value.get("user_id", "")),
+                            ]
+                        )
+                    )
+                else:
+                    await matcher.send(
+                        V11Msg(
+                            [
+                                V11Seg.text("已屏蔽"),
+                                V11Seg.at(value.get("user_id", "")),
+                                V11Seg.text(f" {value.get('duration', 0):.2f} 秒"),
+                            ]
+                        )
+                    )
             else:
                 logger.warning(f"Unknown special operation: {op}")
         group.todo_ops = []

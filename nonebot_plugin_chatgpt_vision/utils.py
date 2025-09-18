@@ -19,7 +19,6 @@ except Exception:
 def fix_xml(xml: str) -> str:
     """
     流式把脏“类 XML”规约为**合规 XML 片段**（可能包含多个顶层 <p>）。
-    新增规则：同一 <p> 内最多 1 个 <reply/>；第 2 个起自动分段，并在该 <reply/> 后补一个空格。
     """
     VOID = {"mention", "reply", "image", "face", "br"}
     IGNORE = {"time", "name", "uid"}

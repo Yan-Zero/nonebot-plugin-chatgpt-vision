@@ -18,7 +18,7 @@ class BlockTool(Tool):
                         "user_id": {"type": "string", "description": "要屏蔽的用户ID"},
                         "duration": {
                             "type": "number",
-                            "description": "屏蔽时长（秒），如果为0则是取消屏蔽。",
+                            "description": "屏蔽时长（秒），如果为0则是取消屏蔽。正数的话，则是累加屏蔽时间。",
                         },
                     },
                     "required": ["user_id", "duration"],
@@ -27,8 +27,10 @@ class BlockTool(Tool):
         }
 
     async def execute(self, user_id: str, duration: float) -> str:
-        self.group_record.block(user_id, duration)
-        return f"已屏蔽用户 {user_id} {duration} 秒"
+        duration = self.group_record.block(user_id, duration)
+        if duration <= 0:
+            return f"已取消屏蔽用户 {user_id}"
+        return f"已屏蔽用户 {user_id} {duration:.2f} 秒"
 
 
 class ListBlockedTool(Tool):
