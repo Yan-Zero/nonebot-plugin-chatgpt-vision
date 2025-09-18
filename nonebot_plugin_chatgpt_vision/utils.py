@@ -15,6 +15,8 @@ try:
 except Exception:
     QFACE = {}
 
+GLOBAL_PROMPT = ""
+
 
 def fix_xml(xml: str) -> str:
     """

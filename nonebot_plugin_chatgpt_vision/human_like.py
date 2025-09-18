@@ -1,7 +1,8 @@
-import random
-import yaml
-import pathlib
 import os
+import re
+import yaml
+import random
+import pathlib
 from datetime import datetime
 from nonebot import on_command, on_notice, on_message, logger
 from nonebot.params import CommandArg
@@ -43,6 +44,12 @@ try:
         with open(files, "r", encoding="utf-8") as f:
             data: dict = yaml.load(f, yaml.UnsafeLoader)  # type: ignore
             for k in data:
+                if k == "GLOBAL_PROMPT":
+                    from . import utils
+
+                    utils.GLOBAL_PROMPT = data[k]
+
+                    continue
                 if k not in GROUP_RECORD:
                     GROUP_RECORD[k] = GroupRecord(**_CONFIG.get(k, {}))
                 GROUP_RECORD[k].msgs = data[k].get("msgs", RecordList())
@@ -162,6 +169,7 @@ async def _(bot: V11Bot, event: V11G, state):
         USER_NAME_CACHE[uid] = user_name
     else:
         user_name = USER_NAME_CACHE[uid]
+
     user_name = user_name.replace("，", ",").replace("。", ".")
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
 
@@ -179,6 +187,15 @@ async def _(bot: V11Bot, event: V11G, state):
             images=imgs,
         )
     msg = event.message
+
+    if re.search(
+        r"((提示词|系统提示|开发者提示|隐藏规则|内部指令|系统消息|主人).{0,12}(复述|重复|说出|打印|展示|公开|泄露))|((show|print|reveal|repeat).{0,20}(prompt|system message|dev prompt|instructions))|(忽略之前.*指令/规则)|(you are now (admin|system))",
+        msg.extract_plain_text(),
+    ) and re.search(
+        r"(</message>|</system>|</instructions>|</dev_prompt>|</p>)", msg.to_rich_text()
+    ):
+        return
+
     if (
         await to_me()(bot=bot, event=event, state=state)
         and not msg.to_rich_text().strip()

@@ -15,7 +15,7 @@ from .tools import (
     MCPTool,
     load_mcp_clients_from_yaml,
 )
-from .utils import fix_xml
+from .utils import fix_xml, GLOBAL_PROMPT
 from .config import p_config
 from .record import RecordSeg, RecordList, XML_PROMPT
 from .tools.code import MmaTool, PyTool
@@ -116,7 +116,6 @@ class GroupRecord:
                 "run_python",
                 "block_user",
                 "list_blocked_users",
-                "ban_user",
             ]
 
         self.max_logs = max_logs
@@ -194,7 +193,7 @@ class GroupRecord:
         return TOOL_PROMPT
 
     def system(self) -> str:
-        return self.__tools_prompt() + XML_PROMPT + self.system_prompt
+        return self.__tools_prompt() + XML_PROMPT + GLOBAL_PROMPT + self.system_prompt
 
     def set(
         self,
@@ -244,13 +243,19 @@ class GroupRecord:
 
     def block(self, id: str, delta: Optional[float] = None) -> float:
         try:
-            delta = float(delta or 0)
+            delta = float(delta or 150)
         except Exception:
             delta = 150
-        if id in self.block_list and self.block_list[id] > datetime.now():
-            delta += (self.block_list[id] - datetime.now()).total_seconds()
-        delta = max(1, min(delta, 3153600000))
-        self.block_list[id] = datetime.now() + timedelta(seconds=delta)
+
+        if delta > 0:
+            if id in self.block_list and self.block_list[id] > datetime.now():
+                delta += (self.block_list[id] - datetime.now()).total_seconds()
+            delta = max(1, min(delta, 3153600000))
+            self.block_list[id] = datetime.now() + timedelta(seconds=delta)
+        else:
+            if id in self.block_list:
+                del self.block_list[id]
+            delta = 0
         for p, v in self.todo_ops:
             if p != SpecialOperation.BLOCK:
                 continue
@@ -337,13 +342,17 @@ class GroupRecord:
                 choice = msg.choices[0]
                 content = ""
                 record_msg: list[tuple[str, str]] = []
+                should_record = False
                 if getattr(choice.message, "content", None):
                     content = fix_xml(choice.message.content.replace("[NULL]", ""))
+                    if content and content != "<p></p>":
+                        should_record = True
                     record_msg.append(("content", content))
                     yield content
 
                 # 检查是否有工具调用
                 if getattr(choice.message, "tool_calls", None):
+                    should_record = True
                     record_msg.append(
                         (
                             "tool_calls",
@@ -355,9 +364,12 @@ class GroupRecord:
                             ),
                         )
                     )
-                record = RecordSeg(self.bot_name, self.bot_id, "", 0, datetime.now())
-                record.msg = record_msg
-                await self.append(record)
+                if should_record:
+                    record = RecordSeg(
+                        self.bot_name, self.bot_id, "", 0, datetime.now()
+                    )
+                    record.msg = record_msg
+                    await self.append(record)
 
                 if getattr(choice.message, "tool_calls", None):
                     for tool_call in choice.message.tool_calls:
