@@ -69,34 +69,102 @@ async def convert_gif_to_png_base64(url: str) -> str:
     return url
 
 
-def v11msg_to_xml(msg: V11Msg, msg_id: str | None) -> tuple[str, list]:
-    if msg_id is None:
-        ret = "<p>"
-    else:
-        ret = f'<p msgid="{msg_id}">'
-    images = []
-    for seg in msg:
-        if seg.type == "text":
-            ret += seg.data["text"]
-        elif seg.type == "at":
-            if "name" in seg.data:
-                ret += f'<mention uid="{seg.data["qq"]}">{seg.data["name"]}</mention>'
-            else:
-                ret += f'<mention uid="{seg.data["qq"]}"/>'
-        elif seg.type == "reply":
-            ret += f'<reply id="{seg.data["id"]}"/>'
-        elif seg.type == "face":
-            ret += f'[face,{QFACE.get(seg.data["id"], "notfound")}]'
-        elif seg.type == "image":
-            images.append(seg.data["file"])
-            ret += "[image]"
-        elif seg.type == "mface":
-            images.append(seg.data["url"])
-            ret += f'[image,{seg.data["summary"][1:-1]}]'
+async def v11msg_to_xml_async(
+    msg: V11Msg, msg_id: Optional[str]
+) -> tuple[str, list[str]]:
+
+    # 用于把顺序文本正确放入 parent.text / last_child.tail
+    def _append_text(parent: etree._Element, text: str):
+        if not text:
+            return
+        children = list(parent)
+        if not children:
+            parent.text = (parent.text or "") + text
         else:
-            ret += f"[{seg.type}]"
-    ret += "</p>"
-    return ret, images
+            last = children[-1]
+            last.tail = (last.tail or "") + text
+
+    # 创建根 <p>
+    p = etree.Element("p")
+    if msg_id is not None:
+        p.set("msgid", msg_id)
+
+    images: list[str] = []
+
+    for seg in msg:
+        st = seg.type
+        data = seg.data
+
+        if st == "text":
+            _append_text(p, data.get("text", ""))
+
+        elif st == "at":
+            # <mention uid="...">可选 name</mention>
+            uid = str(data.get("qq", ""))
+            mention = etree.SubElement(p, "mention")
+            mention.set("uid", uid)
+            name = data.get("name")
+            if name is not None:
+                # 放到子元素文本中
+                mention.text = name
+
+        elif st == "reply":
+            # <reply id="..."/>
+            rid = str(data.get("id", ""))
+            reply = etree.SubElement(p, "reply")
+            reply.set("id", rid)
+
+        elif st == "face":
+            # <image name="笑" url="FACE://..."/>
+            face_id = data.get("id")
+            name = QFACE.get(face_id, f"表情{face_id}")
+            face = etree.SubElement(p, "image")
+            face.set("name", name)
+            face.set("url", f"FACE://{face_id}")
+        elif st == "image":
+            # <image name="..."/> 或 <image url="..."/>
+            file_ = data.get("file")
+            if file_:
+                url = file_
+                if file_.startwith(
+                    "https://multimedia.nt.qq.com.cn"
+                ) or file_.startwith("http://multimedia.nt.qq.com.cn"):
+                    # 处理GIF转PNG
+                    url = await convert_gif_to_png_base64(file_)
+                    file_ = await upload_image(url)
+                    if not url.startswith("data:"):
+                        url = file_
+                images.append(url)
+            image = etree.SubElement(p, "image")
+            if file_:
+                image.set("url", file_)
+
+        elif st == "mface":
+            url = data.get("url")
+            if url:
+                images.append(url)
+            summary = data.get("summary", "")
+            if (
+                isinstance(summary, str)
+                and len(summary) >= 2
+                and summary[0] == "["
+                and summary[-1] == "]"
+            ):
+                summary_inner = summary[1:-1]
+            else:
+                summary_inner = summary
+            image = etree.SubElement(p, "image")
+            if summary_inner:
+                image.set("name", summary_inner)
+            if url:
+                image.set("url", url)
+
+        else:
+            _append_text(p, f"[{st}]")
+
+    xml_str = etree.tostring(p, encoding="unicode")
+
+    return xml_str, images
 
 
 class RecordSeg:
@@ -119,7 +187,7 @@ class RecordSeg:
         self,
         name: str,
         uid: str,
-        msg: V11Msg | str,
+        msg: str,
         msg_id: str | int,
         time: datetime,
         images: list[str] = [],
@@ -132,17 +200,10 @@ class RecordSeg:
         self.name = name
         self.uid = uid
         self.msg = []
-        if isinstance(msg, V11Msg):
-            import warnings
-
-            warnings.warn(
-                "RecordSeg.msg should be str, V11Msg is deprecated", DeprecationWarning
-            )
-            ret, imgs = v11msg_to_xml(msg, str(msg_id))
-            self.images.extend(imgs)
-            self.msg.append((str(msg_id), ret))
-        else:
+        if isinstance(msg, str):
             self.msg.append((str(msg_id), msg))
+        else:
+            raise ValueError("msg must be a string")
         self.time = time
         self.reply = reply
 
@@ -193,29 +254,6 @@ class RecordSeg:
                 }
             )
         return ret
-
-    async def fetch(self, image_mode: bool = False) -> None:
-        if self.reply:
-            await self.reply.fetch(image_mode)
-            if self.reply.images:
-                self.images.extend(self.reply.images)
-
-        if not image_mode:
-            return
-        if not self.images:
-            return
-        for i in range(len(self.images)):
-            url = self.images[i]
-            if not url.startswith("https://multimedia.nt.qq.com.cn"):
-                continue
-            if not url.startswith("http://multimedia.nt.qq.com.cn"):
-                continue
-            # 处理GIF转PNG
-            url = await convert_gif_to_png_base64(url)
-            # 如果不是base64格式，继续原来的上传逻辑
-            if not url.startswith("data:"):
-                url = await upload_image(url)
-            self.images[i] = url
 
 
 class RecordList:
@@ -322,9 +360,14 @@ XML_PROMPT = """Here is a message in XML format. The message may contain text, m
 你的回复应该类似于：
 <p><reply id="-1696903780"/>这是真的吗？<mention uid="114514"/></p>
 <p><image name="笑"/></p>
+<p>我觉得{x ∈ Z | 1 ≤ x &le; 10}的阶是10才对</p>
 
-我们一般推荐多分段，因为单段如果太长容易造成他人阅读困难等。记得你的回复需要正确转义 XML 相关的符号。
-注意，<p>标签外的内容会被忽略，也就是说一切内容都必须放在<p>标签内，并且p tag不允许嵌套。
+我们一般推荐多分段，因为单段如果太长容易造成他人阅读困难等。记得你的回复需要正确转义 XML 相关的符号，特别是 & < > " ' 等符号。
+<p>标签外的内容会被忽略，也就是说一切内容都必须放在<p>标签内，并且p tag不允许嵌套。
+
+WARNING: p tag 内的文本内容，特别是数学公式等包含大于、小于号的内容，必须正确转义，否则会导致 XML 解析失败。
+WARNING: p tag 内的文本内容，特别是数学公式等包含大于、小于号的内容，必须正确转义，否则会导致 XML 解析失败。
+
 
 """
 
@@ -370,8 +413,15 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
             elif sub.tag == "image":
                 name = sub.get("name", None)
                 url = sub.get("url", None)
-                if url and url.startswith("http"):
-                    segments.append(V11Seg.image(file=url))
+                if url:
+                    if url.startswith("http"):
+                        segments.append(V11Seg.image(file=url))
+                    elif url.startswith("FACE://"):
+                        face_id = url[7:]
+                        if face_id.isdigit():
+                            segments.append(V11Seg.face(int(face_id)))
+                        else:
+                            segments.append(V11Seg.image(file=f"FOUND://{face_id}"))
                 elif name:
                     segments.append(V11Seg.image(file=f"FOUND://{name}"))
                 if sub.tail:

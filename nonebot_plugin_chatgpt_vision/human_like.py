@@ -22,7 +22,7 @@ from .config import p_config
 from .picsql import randpic
 from .group import GroupRecord, SpecialOperation
 from .utils import USER_NAME_CACHE
-from .record import RecordSeg, RecordList, xml_to_v11msg, v11msg_to_xml
+from .record import RecordSeg, RecordList, xml_to_v11msg, v11msg_to_xml_async
 
 
 _CONFIG: dict = {}
@@ -151,7 +151,9 @@ async def _(bot: V11Bot, event: V11G, state):
 
     reply = None
     if event.reply:
-        msg, imgs = v11msg_to_xml(event.reply.message, str(event.reply.message_id))
+        msg, imgs = await v11msg_to_xml_async(
+            event.reply.message, str(event.reply.message_id)
+        )
         reply = RecordSeg(
             name=event.reply.sender.nickname or "",
             uid=str(event.reply.sender.user_id),
@@ -171,7 +173,7 @@ async def _(bot: V11Bot, event: V11G, state):
     if not msg.to_rich_text().strip():
         return
 
-    _msg, imgs = v11msg_to_xml(msg, str(event.message_id))
+    _msg, imgs = await v11msg_to_xml_async(msg, str(event.message_id))
     await group.append(
         # user_name, uid, msg, event.message_id, datetime.now(), reply=reply
         RecordSeg(
@@ -262,7 +264,7 @@ async def _(bot: V11Bot, event: NoticeEvent):
         return
     else:
         msg = V11Msg([V11Seg.text(f"{name}({uid}) 发生了{event.notice_type}")])
-    msg, imgs = v11msg_to_xml(msg, None)
+    msg, imgs = await v11msg_to_xml_async(msg, None)
     await group.append(
         RecordSeg(
             name="GroupNotice",

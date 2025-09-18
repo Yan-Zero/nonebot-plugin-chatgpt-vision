@@ -237,7 +237,6 @@ class GroupRecord:
         self,
         record: RecordSeg,
     ):
-        await record.fetch(self.image_mode == 1)
         self.msgs.add(record)
         if len(self.msgs) > self.max_logs:
             self.msgs.pop(0)
