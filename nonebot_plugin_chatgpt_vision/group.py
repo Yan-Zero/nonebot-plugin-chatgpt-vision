@@ -336,19 +336,8 @@ class GroupRecord:
                 content = ""
                 record_msg: list[tuple[str, str]] = []
                 if getattr(choice.message, "content", None):
-                    content = choice.message.content.replace("[NULL]", "")
-                    content = fix_xml(content)
-                    record_msg.append(
-                        (
-                            "content",
-                            str(
-                                yaml.safe_dump(
-                                    content,
-                                    allow_unicode=True,
-                                )
-                            ),
-                        )
-                    )
+                    content = fix_xml(choice.message.content.replace("[NULL]", ""))
+                    record_msg.append(("content", content))
                     yield content
 
                 # 检查是否有工具调用

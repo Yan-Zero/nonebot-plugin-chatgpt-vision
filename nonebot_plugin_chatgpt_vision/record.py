@@ -329,7 +329,10 @@ class RecordList:
                     "role": "assistant",
                 }
                 for id, value in record.msg:
-                    data[id] = yaml.safe_load(value)
+                    if id == "content":
+                        data[id] = value
+                    else:
+                        data[id] = yaml.safe_load(value)
                 ret.append(data)
                 continue
             if record.uid == "tool":

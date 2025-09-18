@@ -1,10 +1,10 @@
+import re
 import json
 import pathlib
 
 from typing import List
 from lxml import etree  # type: ignore
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
-
 
 USER_NAME_CACHE: dict = {}
 
@@ -23,6 +23,8 @@ def fix_xml(xml: str) -> str:
     """
     VOID = {"mention", "reply", "image", "face", "br"}
     IGNORE = {"time", "name", "uid"}
+    # NEW: 判定“可见内容”的简易正则（存在非空白，或出现这些可见标记）
+    _VISIBLE_TAGS_RE = re.compile(r"<(code|br|mention|reply|image|face)\b", re.I)
 
     def _escape_text(s: str) -> str:
         if not s:
@@ -30,17 +32,27 @@ def fix_xml(xml: str) -> str:
         s = s.replace("&nbsp;", " ").replace("\u00a0", " ")
         return _xml_escape(s)
 
+    # NEW: outside/cur 是否有“可见内容”
+    def _has_visible(fragment: str) -> bool:
+        if not fragment:
+            return False
+        # 去掉所有 XML 标签再看是否有非空白
+        text_only = re.sub(r"<[^>]+>", "", fragment)
+        if text_only.strip():
+            return True
+        # 或包含可见的自闭合/块级标记
+        return bool(_VISIBLE_TAGS_RE.search(fragment))
+
     class _Target:
         def __init__(self):
-            self.out_ps: List[str] = []  # 已完成段
-            self.cur: List[str] = []  # 当前 <p> 内容
-            self.outside: List[str] = []  # <p> 之外的片段（最终会包装为自己的 <p>）
+            self.out_ps: List[str] = []
+            self.cur: List[str] = []
+            self.outside: List[str] = []
             self.p_depth: int = 0
             self.in_code: bool = False
             self.code_lang: str = "text"
             self.code_buf: List[str] = []
             self.skip_stack: List[str] = []
-            # —— 新增：当前 <p> 内是否已出现 reply ——
             self.reply_seen_in_p: bool = False
 
         def _append_text(self, s: str):
@@ -48,17 +60,15 @@ def fix_xml(xml: str) -> str:
                 return
             if self.in_code:
                 self.code_buf.append(s)
-            elif self.p_depth > 0:
+                return
+            if self.p_depth > 0:
                 self.cur.append(_escape_text(s))
             else:
-                self.outside.append(_escape_text(s))
-
-        def _flush_p(self):
-            if self.cur:
-                self.out_ps.append("<p>" + "".join(self.cur) + "</p>")
-                self.cur.clear()
-            # 每次结束一个逻辑段后，清除该段的 reply 计数
-            self.reply_seen_in_p = False
+                # NEW: p 外的纯空白一律丢弃，避免生成空 <p>
+                s_norm = s.replace("&nbsp;", " ").replace("\u00a0", " ")
+                if s_norm.strip():
+                    self.outside.append(_escape_text(s_norm))
+                # else: 忽略
 
         def _emit_fragment_into_current_scope(self, frag: str):
             if not frag:
@@ -69,7 +79,6 @@ def fix_xml(xml: str) -> str:
                 self.outside.append(frag)
 
         def _emit_void(self, name: str, attrs: dict):
-            # 规范化生成自闭合标签（字符串）
             if name == "mention":
                 uid = attrs.get("uid", "10001")
                 return f"<mention uid={_xml_q(uid)}/>"
@@ -91,12 +100,26 @@ def fix_xml(xml: str) -> str:
                 return "<br/>"
             return ""
 
+        def _flush_p(self):
+            if self.cur:
+                self.out_ps.append("<p>" + "".join(self.cur) + "</p>")
+                self.cur.clear()
+            self.reply_seen_in_p = False
+
+        def _flush_outside_as_p(self):
+            if not self.outside:
+                return
+            fragment = "".join(self.outside)
+            # 仅当“可见”时才包成段；否则丢弃（避免 <p>\n\n</p>）
+            if _has_visible(fragment):
+                self.out_ps.append("<p>" + fragment + "</p>")
+            self.outside.clear()
+
         def start(self, tag: str, attrs: dict):
             if tag == "root":
                 return
 
             if self.in_code:
-                # 在 code 中：把起始标签按文本写入
                 frag = "<" + tag
                 for k, v in (attrs or {}).items():
                     frag += f" {k}={_xml_q(v)}"
@@ -111,29 +134,22 @@ def fix_xml(xml: str) -> str:
             if tag in VOID:
                 frag = self._emit_void(tag, attrs or {})
                 if not frag:
-                    # 即使无法规范化，也进入 skip，屏蔽其内部脏文本
                     self.skip_stack.append(tag)
                     return
 
                 if tag == "reply":
-                    # —— 核心逻辑：一个 <p> 只能有一个 reply ——
                     if self.p_depth > 0:
                         if self.reply_seen_in_p:
-                            # 已经出现过 reply：切段
+                            # 第二个及以后 reply：切段
                             self._flush_p()
-                        # 在新/当前段开头放 reply
                         self._emit_fragment_into_current_scope(frag)
                         self.reply_seen_in_p = True
                     else:
-                        # 不在 <p> 内：按顺序落在 outside，最终会被包成自己的 <p>
                         self._emit_fragment_into_current_scope(frag)
-                    # 屏蔽其内部文本
                     self.skip_stack.append(tag)
                     return
 
-                # 其它 VOID 正常放入当前位置
                 self._emit_fragment_into_current_scope(frag)
-                # 为兼容错误成对写法，进入 skip 直至 end
                 self.skip_stack.append(tag)
                 return
 
@@ -146,17 +162,14 @@ def fix_xml(xml: str) -> str:
 
             if tag == "p":
                 if self.p_depth == 0 and self.outside:
-                    # 先把 p 外的内容按顺序打包成一个 <p>
-                    self.out_ps.append("<p>" + "".join(self.outside) + "</p>")
-                    self.outside.clear()
+                    # 先把 p 外的内容按可见性打包
+                    self._flush_outside_as_p()
                 self.p_depth += 1
-                # 进入一个新逻辑段（或嵌套 p 继续同段），只有最外层 p_depth==1 才需要 reset
                 if self.p_depth == 1:
                     self.reply_seen_in_p = False
                 return
 
-            # 未知标签：仅当容器，不输出标签自身
-            self.skip_stack.append("")  # 占位
+            self.skip_stack.append("")
 
         def data(self, text: str):
             if not text:
@@ -214,7 +227,6 @@ def fix_xml(xml: str) -> str:
             return
 
         def close(self) -> str:
-            # 未闭合 code：自动补闭
             if self.in_code:
                 code_text = "".join(self.code_buf)
                 frag = (
@@ -228,14 +240,14 @@ def fix_xml(xml: str) -> str:
                 self.code_buf.clear()
                 self.in_code = False
                 self.code_lang = "text"
-            # 未闭合 p：结束当前段
+
             if self.p_depth > 0:
                 self.p_depth = 0
                 self._flush_p()
-            # 还有 p 外的内容：按顺序包成一条 <p>
-            if self.outside:
-                self.out_ps.append("<p>" + "".join(self.outside) + "</p>")
-                self.outside.clear()
+
+            # 打包 outside（仅当可见）
+            self._flush_outside_as_p()
+
             return "".join(self.out_ps)
 
     target = _Target()
