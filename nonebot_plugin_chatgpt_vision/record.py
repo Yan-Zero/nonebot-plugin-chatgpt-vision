@@ -126,9 +126,9 @@ async def v11msg_to_xml_async(
             file_ = data.get("file")
             if file_:
                 url = file_
-                if file_.startwith(
+                if file_.startswith(
                     "https://multimedia.nt.qq.com.cn"
-                ) or file_.startwith("http://multimedia.nt.qq.com.cn"):
+                ) or file_.startswith("http://multimedia.nt.qq.com.cn"):
                     # 处理GIF转PNG
                     url = await convert_gif_to_png_base64(file_)
                     file_ = await upload_image(url)
