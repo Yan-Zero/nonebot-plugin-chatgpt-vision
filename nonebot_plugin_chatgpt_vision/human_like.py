@@ -3,6 +3,7 @@ import re
 import yaml
 import random
 import pathlib
+
 from datetime import datetime
 from nonebot import on_command, on_notice, on_message, logger
 from nonebot.params import CommandArg
@@ -19,10 +20,10 @@ from nonebot.rule import Rule
 from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
 
-from .config import p_config
-from .picsql import randpic
 from .group import GroupRecord, SpecialOperation
 from .utils import USER_NAME_CACHE
+from .config import p_config
+from .picsql import randpic
 from .record import RecordSeg, RecordList, xml_to_v11msg, v11msg_to_xml_async
 
 
@@ -163,7 +164,7 @@ async def save_group_record(group_id: str):
                         "msgs": group.msgs,
                         "rest": group.rest,
                         "block_list": group.block_list,
-                        "credit": group.credit,
+                        # "credit": group.credit,
                     }
                 },
                 f,
@@ -354,18 +355,6 @@ async def _(bot: Bot, event: V11G, state):
         group.rest = random.randint(group.min_rest, group.max_rest)
         group.remake()
         await remake.finish("已重置")
-
-
-credit = on_command(
-    "额度",
-    rule=to_me(),
-)
-
-
-@credit.handle()
-async def _(bot: Bot, event: V11G, state):
-    group: GroupRecord = GROUP_RECORD[str(event.group_id)]
-    await credit.finish(f"剩余额度：{group.credit*7.2: .3f}￥")
 
 
 tool_manager = on_command(

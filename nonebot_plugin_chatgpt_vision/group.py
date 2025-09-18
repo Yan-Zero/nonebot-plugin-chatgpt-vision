@@ -15,13 +15,12 @@ from .tools import (
     MCPTool,
     load_mcp_clients_from_yaml,
 )
-from .utils import fix_xml, GLOBAL_PROMPT
+from .utils import fix_xml, GLOBAL_PROMPT, download_image_to_base64
 from .config import p_config
 from .record import RecordSeg, RecordList, XML_PROMPT
 from .tools.code import MmaTool, PyTool
 from .tools.block import BlockTool, ListBlockedTool
 from .tools.group import BanUser
-from .fee.userrd import get_comsumption
 
 
 class SpecialOperation(Enum):
@@ -42,16 +41,17 @@ class GroupRecord:
     min_rest: int
     cd: timedelta
     max_logs: int
-    credit: float = 1
+
     image_mode: int = 0
-
-    lock: asyncio.Lock
-
-    tool_manager: ToolManager
-    mcp_loaded: bool = False
     todo_ops: list[tuple[SpecialOperation, Any]]
     default_tools: list[str] = []
     mcp_config: Optional[str | dict] = None
+    base64: bool = False
+    """是否使用 base64 传输图片，默认否"""
+
+    lock: asyncio.Lock
+    mcp_loaded: bool = False
+    tool_manager: ToolManager
 
     def __init__(
         self,
@@ -203,6 +203,7 @@ class GroupRecord:
         split: Optional[list] = None,
         max_logs: Optional[int] = None,
         image_mode: Optional[int] = None,
+        base64: Optional[bool] = None,
         **kwargs,
     ):
         if bot_name is not None:
@@ -225,11 +226,27 @@ class GroupRecord:
             self.max_logs = max_logs
         if image_mode is not None:
             self.image_mode = image_mode
+        if base64 is not None:
+            self.base64 = base64
 
     async def append(
         self,
         record: RecordSeg,
     ):
+        pop = set()
+        for i in range(len(record.images)):
+            if record.images[i].startswith("data:"):
+                continue
+            if not self.base64:
+                continue
+            try:
+                record.images[i] = await download_image_to_base64(record.images[i])
+            except Exception as ex:
+                logger.warning(f"图片下载失败：{ex}")
+                pop.add(i)
+        if pop:
+            record.images = [v for i, v in enumerate(record.images) if i not in pop]
+
         self.msgs.add(record)
         if len(self.msgs) > self.max_logs:
             self.msgs.pop(0)
@@ -278,8 +295,6 @@ class GroupRecord:
                 return True
             else:
                 del self.block_list[id]
-        if self.credit < 0:
-            return True
         return False
 
     def merge(self) -> list[dict]:
@@ -326,11 +341,6 @@ class GroupRecord:
                     tools=tools if tools else None,
                     tool_choice="auto" if tools else None,
                 )
-
-                try:
-                    self.credit -= get_comsumption(msg.usage.model_dump(), self.model)
-                except Exception:
-                    self.credit -= 1000
 
                 choice = msg.choices[0]
                 content = ""

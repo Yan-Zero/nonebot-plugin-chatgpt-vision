@@ -1,7 +1,11 @@
+import io
 import re
 import json
+import base64
+import aiohttp
 import pathlib
 
+from PIL import Image
 from typing import List
 from lxml import etree  # type: ignore
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
@@ -16,6 +20,93 @@ except Exception:
     QFACE = {}
 
 GLOBAL_PROMPT = ""
+
+
+async def convert_gif_to_png_base64(url: str) -> str:
+    """
+    检测并转换GIF图片为PNG格式的base64编码
+
+    Args:
+        url: 图片URL
+
+    Returns:
+        如果是GIF则返回转换后的base64 data URL，否则返回原URL
+    """
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return url
+
+                # 只读取前6个字节判断是否为GIF
+                header = await response.content.read(6)
+                if len(header) < 6 or header[:3] != b"GIF":
+                    return url
+
+                # 确认是GIF后，重新请求完整内容
+                async with session.get(url) as full_response:
+                    if full_response.status != 200:
+                        return url
+
+                    content = await full_response.read()
+
+                    # 转换为PNG
+                    with Image.open(io.BytesIO(content)) as img:
+                        # 转换为RGBA模式并取第一帧
+                        img = img.convert("RGBA")
+
+                        # 保存为PNG格式
+                        output = io.BytesIO()
+                        img.save(output, format="PNG")
+                        output.seek(0)
+
+                        # 转换为base64
+                        png_data = output.getvalue()
+                        base64_data = base64.b64encode(png_data).decode("utf-8")
+
+                        return f"data:image/png;base64,{base64_data}"
+
+    except Exception as e:
+        from nonebot import logger
+
+        logger.error(f"GIF转PNG失败: {e}")
+        return url
+
+    return url
+
+
+async def download_image_to_base64(url: str) -> str:
+    """
+    下载图片并转换为base64编码的data URL
+
+    Args:
+        url: 图片URL
+
+    Returns:
+        base64编码的data URL
+    """
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return url
+
+                content = await response.read()
+
+                # 转换为base64
+                base64_data = base64.b64encode(content).decode("utf-8")
+
+                # 尝试获取图片格式
+                content_type = response.headers.get("Content-Type", "image/png")
+                return f"data:{content_type};base64,{base64_data}"
+
+    except Exception as e:
+        from nonebot import logger
+
+        logger.error(f"图片下载失败: {e}")
+        return url
+
+    return url
 
 
 def fix_xml(xml: str) -> str:
