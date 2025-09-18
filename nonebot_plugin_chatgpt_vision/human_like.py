@@ -34,6 +34,24 @@ try:
         _CONFIG = yaml.safe_load(f) or {}  # type: ignore
 except Exception:
     _CONFIG = {}
+if "GLOBAL_PROMPT" in _CONFIG:
+    from . import utils
+
+    utils.GLOBAL_PROMPT = _CONFIG["GLOBAL_PROMPT"]
+    del _CONFIG["GLOBAL_PROMPT"]
+for files in pathlib.Path("./configs/chatgpt-vision/configs").glob("*.yaml"):
+    try:
+        with open(files, "r", encoding="utf-8") as f:
+            data: dict = yaml.safe_load(f) or {}  # type: ignore
+            for k in data:
+                if k not in _CONFIG:
+                    _CONFIG[k] = data[k]
+                    logger.info(f"Loaded config for {k}")
+                else:
+                    logger.warning(f"Duplicate config for {k}, ignored")
+    except Exception as ex:
+        logger.error(ex)
+
 
 GROUP_RECORD: dict = {}
 for v in p_config.human_like_group:
@@ -44,12 +62,6 @@ try:
         with open(files, "r", encoding="utf-8") as f:
             data: dict = yaml.load(f, yaml.UnsafeLoader)  # type: ignore
             for k in data:
-                if k == "GLOBAL_PROMPT":
-                    from . import utils
-
-                    utils.GLOBAL_PROMPT = data[k]
-
-                    continue
                 if k not in GROUP_RECORD:
                     GROUP_RECORD[k] = GroupRecord(**_CONFIG.get(k, {}))
                 GROUP_RECORD[k].msgs = data[k].get("msgs", RecordList())
@@ -189,10 +201,14 @@ async def _(bot: V11Bot, event: V11G, state):
     msg = event.message
 
     if re.search(
-        r"((提示词|系统提示|开发者提示|隐藏规则|内部指令|系统消息|主人).{0,12}(复述|重复|说出|打印|展示|公开|泄露))|((show|print|reveal|repeat).{0,20}(prompt|system message|dev prompt|instructions))|(忽略之前.*指令/规则)|(you are now (admin|system))",
+        r"((提示词|系统提示|开发者提示|隐藏规则|内部指令|系统消息|主人).{0,12}(复述|重复|说出|打印|展示|公开|泄露))|"
+        r"((复述|重复|说出|打印|展示|公开|泄露).{0,12}(提示词|系统提示|开发者提示|隐藏规则|内部指令|系统消息|主人))|"
+        r"((show|print|reveal|repeat).{0,20}(prompt|system message|dev prompt|instructions))|"
+        r"(忽略之前.*指令/规则)|(you are now (admin|system))",
         msg.extract_plain_text(),
     ) and re.search(
-        r"(</message>|</system>|</instructions>|</dev_prompt>|</p>)", msg.to_rich_text()
+        r"(</message>|</system>|</instructions>|</dev_prompt>|</p>)",
+        msg.extract_plain_text(),
     ):
         return
 

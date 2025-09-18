@@ -41,7 +41,6 @@ class GroupRecord:
     max_rest: int
     min_rest: int
     cd: timedelta
-    inline_content: dict[str, str]
     max_logs: int
     credit: float = 1
     image_mode: int = 0
@@ -52,6 +51,7 @@ class GroupRecord:
     mcp_loaded: bool = False
     todo_ops: list[tuple[SpecialOperation, Any]]
     default_tools: list[str] = []
+    mcp_config: Optional[str | dict] = None
 
     def __init__(
         self,
@@ -62,10 +62,9 @@ class GroupRecord:
         min_rest: int = 30,
         max_rest: int = 60,
         cd: float = 8,
-        split: Optional[list[str]] = None,
-        inline_content: Optional[dict[str, str]] = None,
         max_logs: int = p_config.human_like_max_log,
         default_tools: Optional[list[str]] = None,
+        mcp_config: Optional[str | dict] = None,
         **kwargs,
     ):
         self.todo_ops = []
@@ -73,18 +72,10 @@ class GroupRecord:
         self.rest = max_rest
         self.min_rest = min_rest
         self.cd = timedelta(seconds=cd)
-        if split is None:
-            self.split = ["。", "，", "\n"]
-        else:
-            self.split = split
         self.lock = asyncio.Lock()
         self.model = model or p_config.openai_default_model
         self.bot_name = bot_name
         self.bot_id = bot_id
-        if inline_content:
-            self.inline_content = inline_content
-        else:
-            self.inline_content = {}
         if system_prompt:
             self.system_prompt = system_prompt
         else:
@@ -117,7 +108,7 @@ class GroupRecord:
                 "block_user",
                 "list_blocked_users",
             ]
-
+        self.mcp_config = mcp_config
         self.max_logs = max_logs
         self.set(**kwargs)
 
@@ -154,7 +145,12 @@ class GroupRecord:
             self.mcp_loaded = True
             return
         # 仅从 YAML 聚合 MCP 客户端
-        multi = load_mcp_clients_from_yaml(getattr(p_config, "mcp_config_file", None))
+        if self.mcp_config:
+            multi = load_mcp_clients_from_yaml(self.mcp_config)
+        else:
+            multi = load_mcp_clients_from_yaml(
+                getattr(p_config, "mcp_config_file", None)
+            )
         if not multi:
             self.mcp_loaded = True
             return
@@ -205,7 +201,6 @@ class GroupRecord:
         max_rest: Optional[int] = None,
         cd: Optional[float] = None,
         split: Optional[list] = None,
-        inline_content: Optional[dict[str, str]] = None,
         max_logs: Optional[int] = None,
         image_mode: Optional[int] = None,
         **kwargs,
@@ -226,8 +221,6 @@ class GroupRecord:
             self.cd = timedelta(seconds=cd)
         if split is not None:
             self.split = split
-        if inline_content is not None:
-            self.inline_content = inline_content
         if max_logs is not None:
             self.max_logs = max_logs
         if image_mode is not None:

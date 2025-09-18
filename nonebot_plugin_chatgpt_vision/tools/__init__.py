@@ -161,7 +161,7 @@ def _split_cmd(cmd: str) -> list[str]:
 
 
 def load_mcp_clients_from_yaml(
-    path: str | os.PathLike | None,
+    arg: str | os.PathLike | dict | None,
 ) -> list[MCPUnifiedClient]:
     """
     从 YAML 文件构建多个 MCP 客户端（统一封装版）。支持：
@@ -171,16 +171,22 @@ def load_mcp_clients_from_yaml(
 
     也可在外部直接传入完整 MCP 配置或 URL，本函数仅针对该 YAML 形态进行解析。
     """
-    if not path:
-        return []
-    p = Path(path)
-    if not p.exists():
+    if not arg:
         return []
     data = {}
-    try:
-        data: dict = yaml.safe_load(p.read_text(encoding="utf-8"))  # type: ignore[var-annotated]
-    except Exception:
-        return []
+    if not isinstance(arg, dict):
+        try:
+            p = Path(arg)
+            if not p.exists():
+                return []
+            data: dict = yaml.safe_load(p.read_text(encoding="utf-8"))  # type: ignore[var-annotated]
+        except Exception:
+            try:
+                data: dict = yaml.safe_load(arg)  # type: ignore[var-annotated]
+            except Exception:
+                return []
+    else:
+        data = arg
 
     multi: list[MCPUnifiedClient] = []
 
