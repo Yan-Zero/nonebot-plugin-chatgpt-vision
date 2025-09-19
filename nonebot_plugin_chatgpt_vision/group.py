@@ -347,7 +347,10 @@ class GroupRecord:
                 record_msg: list[tuple[str, str]] = []
                 should_record = False
                 if getattr(choice.message, "content", None):
-                    content = fix_xml(choice.message.content.replace("[NULL]", ""))
+                    content = fix_xml(
+                        choice.message.content.replace("[NULL]", ""),
+                        convert_face_to_image=True,
+                    )
                     if content and content != "<p></p>":
                         should_record = True
                     record_msg.append(("content", content))

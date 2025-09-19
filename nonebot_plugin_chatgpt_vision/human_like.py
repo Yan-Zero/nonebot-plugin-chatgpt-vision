@@ -21,7 +21,7 @@ from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
 
 from .group import GroupRecord, SpecialOperation
-from .utils import USER_NAME_CACHE
+from .utils import USER_NAME_CACHE, check_url_stutas
 from .config import p_config
 from .picsql import randpic
 from .record import RecordSeg, RecordList, xml_to_v11msg, v11msg_to_xml_async
@@ -33,7 +33,8 @@ try:
         os.mkdir("data/human")
     with open("configs/chatgpt-vision/human.yaml", "r", encoding="utf-8") as f:
         _CONFIG = yaml.safe_load(f) or {}  # type: ignore
-except Exception:
+except Exception as ex:
+    logger.error(ex)
     _CONFIG = {}
 if "GLOBAL_PROMPT" in _CONFIG:
     from . import utils
@@ -92,6 +93,11 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
             if seg.type != "image":
                 continue
             name = seg.data.get("file", "")
+            if name.startswith("http"):
+                if await check_url_stutas(name):
+                    continue
+                name = "FOUND://"
+
             if not name.startswith("FOUND://"):
                 continue
             name = name[8:]

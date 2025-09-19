@@ -75,6 +75,17 @@ async def convert_gif_to_png_base64(url: str) -> str:
     return url
 
 
+async def check_url_stutas(url: str) -> bool:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status != 200:
+                    return False
+                return True
+    except Exception:
+        return False
+
+
 async def download_image_to_base64(url: str) -> str:
     """
     下载图片并转换为base64编码的data URL
@@ -109,7 +120,7 @@ async def download_image_to_base64(url: str) -> str:
     return url
 
 
-def fix_xml(xml: str) -> str:
+def fix_xml(xml: str, convert_face_to_image=True) -> str:
     """
     流式把脏“类 XML”规约为**合规 XML 片段**（可能包含多个顶层 <p>）。
     """
@@ -186,8 +197,39 @@ def fix_xml(xml: str) -> str:
                     return f"<image name={_xml_q(name_attr)}/>"
                 return ""
             if name == "face":
-                face_id = attrs.get("id", "0")
-                return f"<face id={_xml_q(face_id)}/>"
+                face_id = attrs.get("id", None)
+                face_name = attrs.get("name", "")
+                # 如果没有 id
+                if not face_id:
+                    if face_name:
+                        return f"<image name={_xml_q(face_name)}/>"
+                    # 都没有，啥也不是
+                    return ""
+
+                # 如果 id 和 name 匹配
+                if face_name == QFACE.get(str(face_id), None):
+                    return f"<face id={_xml_q(face_id)} name={_xml_q(face_name)}/>"
+
+                # 如果 id 和 name 不匹配
+                if convert_face_to_image:
+                    return f"<image name={_xml_q(face_name)}/>"
+
+                # 如果 name 不为空，则反查 id
+                if face_name:
+                    face_id = next(
+                        (k for k, v in QFACE.items() if v == face_name), None
+                    )
+                    if face_id:
+                        return f"<face id={_xml_q(face_id)} name={_xml_q(face_name)}/>"
+                    else:
+                        return f"<image name={_xml_q(face_name)}/>"
+
+                # 如果 name 为空，则反查 name
+                face_name = QFACE.get(str(face_id), "")
+                if face_name:
+                    return f"<face id={_xml_q(face_id)} name={_xml_q(face_name)}/>"
+                # 都没有，啥也不是
+                return ""
             if name == "br":
                 return "<br/>"
             return ""
