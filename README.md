@@ -1,8 +1,6 @@
 # nonebot-plugin-chatgpt-vision
 
-[![NoneBotPluginLogo](https://github.com/A-kirami/nonebot-plugin-chatgpt-vision/blob/resources/nbp_logo.png)](https://v2.nonebot.dev/store)
-
-[![license](https://img.shields.io/github/license/owner/nonebot-plugin-chatgpt-vision.svg)](./LICENSE)
+[![license](https://img.shields.io/github/license/Yan-Zero/nonebot-plugin-chatgpt-vision.svg)](./LICENSE)
 [![pypi](https://img.shields.io/pypi/v/nonebot-plugin-chatgpt-vision.svg)](https://pypi.python.org/pypi/nonebot-plugin-chatgpt-vision)
 ![python](https://img.shields.io/badge/python-3.11+-blue.svg)
 
@@ -75,9 +73,7 @@ stdio:
 
 # http：一个或多个 HTTP MCP 服务（可选）
 http:
-  - base_url: http://127.0.0.1:8080
-    tools_endpoint: /tools   # 可省略，默认为 /tools
-    call_endpoint: /call     # 可省略，默认为 /call
+  - base_url: http://127.0.0.1:8080/mcp
     # 任选其一：
     headers:
       Authorization: Bearer xxx

@@ -495,7 +495,8 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
             elif sub.tag == "tex":
                 # <tex>...</tex>
                 code = sub.text or ""
-                segments.append(V11Seg.text(f" {code} "))
+                if code.strip():
+                    segments.append(V11Seg.image(file=f"MATH://{code.strip()}"))
                 if sub.tail:
                     segments.append(V11Seg.text(sub.tail))
             elif sub.tag == "br":

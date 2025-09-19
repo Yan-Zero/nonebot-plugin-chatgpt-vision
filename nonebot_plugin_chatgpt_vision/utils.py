@@ -5,7 +5,9 @@ import json
 import base64
 import aiohttp
 import pathlib
+import cairosvg
 
+from urllib.parse import quote_plus
 from PIL import Image, ImageChops
 from lxml import etree  # type: ignore
 from typing import List
@@ -124,21 +126,64 @@ async def download_image_to_base64(url: str) -> str:
     return url
 
 
-async def convert_markdown(md: str, bg="#FFFBE6", dpi=144) -> bytes:
-    html_body = markdown(md, extensions=[KatexExtension(no_inline_svg=False)])
+async def convert_tex_to_png(tex: str) -> bytes | None:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://www.zhihu.com/equation?tex=" + quote_plus(tex)
+            ) as response:
+                if response.status != 200:
+                    return None
+                svg_content = await response.text()
+                png_data = cairosvg.svg2png(
+                    bytestring=svg_content.encode("utf-8"),
+                    scale=1,
+                    background_color="#FFFBE6",  # 淡黄色（可换成你想要的 CSS 颜色）
+                )
+                return png_data
+    except Exception as e:
+        from nonebot import logger
 
-    html = f"""
-    <!doctype html><meta charset="utf-8">
-    <style>
-      @page {{ size: A4; margin: 0; }}  /* A4只是容器，后面会裁掉空白 */
-      html,body{{background:{bg}; margin:0; padding:24px;
-        font-family:system-ui,-apple-system,"LXGW WenKai","WenQuanYi Zen Hei","Noto Sans CJK SC",sans-serif}}
-      h1{{margin:0 0 12px 0; font-size:28px}}
-      .katex-display{{display:block; margin:1em 0;}}
-      .katex{{font: normal 1.21em KaTeX_Main, "Times New Roman", serif; line-height:1.2}}
-    </style>
-    <body>{html_body}</body>
+        logger.error(f"公式渲染失败: {e}")
+        return None
+
+
+def convert_markdown(md: str, bg="#FFFBE6", dpi=144, padding=16) -> bytes:
+    html_body = markdown(
+        md,
+        extensions=[
+            "fenced_code",  # 解析 ```code``` 块
+            "codehilite",  # 代码块上色（没装 pygments 也不致命）
+            "tables",  # 表格（以防万一）
+            KatexExtension(no_inline_svg=False),  # 解析 $..$ / $$..$$
+        ],
+        extension_configs={
+            "codehilite": {"guess_lang": False, "noclasses": True},  # 直接内联样式
+        },
+    )
+    css = """@page { size: A4; margin: 0; }
+    html,body {
+        background: transparent; margin:0; padding:24px;
+        font-family: system-ui,-apple-system,"Noto Sans CJK SC","WenQuanYi Zen Hei",sans-serif;
+        line-height:1.6; font-size:16px;
+    }
+    h1,h2,h3 { margin: 0.2em 0 0.6em; }
+    ol,ul { margin: 0.2em 0 0.6em 1.4em; }
+    blockquote{ border-left:4px solid #ddd; margin:12px 0; padding:0 12px; color:#555; }
+    hr{ border:none; border-top:1px solid #e5e7eb; margin:16px 0; }
+    a{ color:#2563eb; text-decoration:none; }
+
+    /* 代码块（codehilite 的 noclasses=True 走内联色，但仍加点底色与圆角） */
+    pre { background:#f6f8fa; padding:12px; overflow:auto; border-radius:6px; }
+    code, pre, tt { font-family: ui-monospace,"Sarasa Mono SC","Noto Sans Mono",monospace; font-size: 0.95em; }
+
+    /* KaTeX（最小子集，保证 WeasyPrint 正常排） */
+    .katex-display{ display:block; margin:1em 0; text-align:left; }
+    .katex { white-space: normal; }
+    .katex .base { line-height:1.2; }
     """
+
+    html = f"<!doctype html><meta charset='utf-8'><style>{css}</style><body>{html_body}</body>"
 
     # 2) HTML -> PNG（bytes）
     def safe_fetcher(url):
@@ -146,21 +191,37 @@ async def convert_markdown(md: str, bg="#FFFBE6", dpi=144) -> bytes:
             raise ValueError("External URLs are blocked")
         return default_url_fetcher(url)
 
-    pdf_bytes = HTML(string=html, url_fetcher=safe_fetcher).write_pdf()
+    pdf_bytes = HTML(string=html, url_fetcher=safe_fetcher).write_pdf(
+        optimize_size=("images",)
+    )
+
+    # 3) PDF -> PNG（bytes）
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    if doc.page_count == 0:
+        raise RuntimeError("Empty PDF generated. Check cairo/pango/fontconfig etc.")
     page = doc[0]
-    zoom = dpi / 72.0
-    mat = fitz.Matrix(zoom, zoom)
+    mat = fitz.Matrix(dpi / 72.0, dpi / 72.0)
     pix = page.get_pixmap(matrix=mat, alpha=True)  # type: ignore
-    png_bytes = pix.tobytes("png")
-    im = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
-    bg_im = Image.new("RGBA", im.size, im.getpixel((0, 0)))
-    diff = ImageChops.difference(im, bg_im)
-    bbox = diff.getbbox()
+    rgba = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGBA")
+
+    # 4) 用 alpha 通道裁边（自适应尺寸）
+    alpha = rgba.split()[-1]
+    bbox = alpha.getbbox()  # 非透明内容的外接矩形
     if bbox:
-        im = im.crop(bbox)
+        rgba = rgba.crop(bbox)
+
+    # 5) 叠加你要的背景颜色 + 内边距（如果不需要背景，直接导出 rgba 即可）
+    if bg is not None:
+        W, H = rgba.size
+        canvas = Image.new("RGBA", (W + 2 * padding, H + 2 * padding), bg)
+        canvas.paste(rgba, (padding, padding), mask=rgba)
+        out_img = canvas
+    else:
+        out_img = rgba
+
+    # 6) 输出 PNG bytes
     out = io.BytesIO()
-    im.save(out, format="PNG")
+    out_img.save(out, format="PNG")
     return out.getvalue()
 
 
