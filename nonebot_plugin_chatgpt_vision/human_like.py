@@ -22,10 +22,10 @@ from nonebot.permission import SUPERUSER
 
 from .group import GroupRecord, SpecialOperation
 from .utils import (
-    USER_NAME_CACHE,
     check_url_stutas,
     convert_tex_to_png,
     convert_markdown_to_png,
+    FORBIDDEN_TOOLS,
 )
 from .config import p_config
 from .picsql import randpic
@@ -46,6 +46,10 @@ if "GLOBAL_PROMPT" in _CONFIG:
 
     utils.GLOBAL_PROMPT = _CONFIG["GLOBAL_PROMPT"]
     del _CONFIG["GLOBAL_PROMPT"]
+
+if "FORBIDDEN_TOOLS" in _CONFIG:
+    FORBIDDEN_TOOLS.update(_CONFIG["FORBIDDEN_TOOLS"])
+
 for files in pathlib.Path("./configs/chatgpt-vision/configs").glob("*.yaml"):
     try:
         with open(files, "r", encoding="utf-8") as f:
@@ -207,13 +211,9 @@ async def save_group_record(group_id: str):
 @humanlike.handle()
 async def _(bot: V11Bot, event: V11G, state):
     uid = event.get_user_id()
-    if uid not in USER_NAME_CACHE:
-        user_name = event.sender.nickname
-        if not user_name or not user_name.strip():
-            user_name = str(event.sender.user_id)[:5]
-        USER_NAME_CACHE[uid] = user_name
-    else:
-        user_name = USER_NAME_CACHE[uid]
+    user_name = event.sender.nickname
+    if not user_name or not user_name.strip():
+        user_name = str(event.sender.user_id)[:5]
 
     user_name = user_name.replace("，", ",").replace("。", ".")
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
@@ -315,13 +315,9 @@ async def _(bot: V11Bot, event: NoticeEvent):
     if group_id not in GROUP_RECORD:
         return
     uid = str(getattr(event, "user_id", None))
-    name: str = USER_NAME_CACHE.get(uid, "")
-    if not name.strip():
-        name = (await bot.get_stranger_info(user_id=int(uid)))["nickname"]
-        name = name.replace("，", ",").replace("。", ".").strip()
-        if not name:
-            name = uid[:5]
-        USER_NAME_CACHE[uid] = name
+    name = (await bot.get_stranger_info(user_id=int(uid)))["nickname"]
+    if not name:
+        name = uid[:5]
 
     group: GroupRecord = GROUP_RECORD[group_id]
     if event.notice_type == "group_increase":

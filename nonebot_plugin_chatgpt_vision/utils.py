@@ -13,8 +13,6 @@ from nonebot import logger
 from urllib.parse import quote_plus
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
 
-USER_NAME_CACHE: dict = {}
-
 QFACE = {}
 try:
     with open(pathlib.Path(__file__).parent / "qface.json", "r", encoding="utf-8") as f:
@@ -23,6 +21,7 @@ except Exception:
     QFACE = {}
 
 GLOBAL_PROMPT = ""
+FORBIDDEN_TOOLS: set[str] = set()
 
 
 async def convert_gif_to_png_base64(url: str) -> str:
@@ -148,7 +147,7 @@ async def convert_markdown_to_png(markdown: str, url: str) -> bytes | None:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 url,
-                json={"markdown": markdown},
+                data=markdown.encode("utf-8"),
             ) as response:
                 if response.status != 200:
                     return None

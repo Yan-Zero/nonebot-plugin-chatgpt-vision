@@ -11,11 +11,12 @@ from datetime import timedelta
 from .chat import chat
 from .chat import error_chat
 from .tools import (
-    ToolManager,
+    Tool,
     MCPTool,
+    ToolManager,
     load_mcp_clients_from_yaml,
 )
-from .utils import fix_xml, GLOBAL_PROMPT, download_image_to_base64
+from .utils import fix_xml, GLOBAL_PROMPT, download_image_to_base64, FORBIDDEN_TOOLS
 from .config import p_config
 from .record import RecordSeg, RecordList, XML_PROMPT
 from .tools.code import MmaTool, PyTool
@@ -31,16 +32,16 @@ class SpecialOperation(Enum):
 class GroupRecord:
     msgs: RecordList
     system_prompt: str
-    model: str
+    model: str = p_config.openai_default_model
     bot_name: str = "苦咖啡"
     rest: int
     last_time: datetime = datetime.now()
     block_list: dict[str, datetime]
     bot_id: str
-    max_rest: int
-    min_rest: int
-    cd: timedelta
-    max_logs: int
+    max_rest: int = 60
+    min_rest: int = 40
+    cd: timedelta = timedelta(seconds=5)
+    max_logs: int = 40
 
     image_mode: int = 0
     todo_ops: list[tuple[SpecialOperation, Any]]
@@ -59,27 +60,18 @@ class GroupRecord:
         bot_id: str = "100000",
         system_prompt: Optional[str] = None,
         model: Optional[str] = None,
-        min_rest: int = 30,
-        max_rest: int = 60,
-        cd: float = 8,
-        max_logs: int = p_config.human_like_max_log,
         default_tools: Optional[list[str]] = None,
         mcp_config: Optional[str | dict] = None,
         **kwargs,
     ):
         self.todo_ops = []
-        self.max_rest = max_rest
-        self.rest = max_rest
-        self.min_rest = min_rest
-        self.cd = timedelta(seconds=cd)
-        self.lock = asyncio.Lock()
-        self.model = model or p_config.openai_default_model
+        if model:
+            self.model = model
         self.bot_name = bot_name
         self.bot_id = bot_id
         if system_prompt:
             self.system_prompt = system_prompt
         else:
-            # 修复未使用 f-string 的问题，并保留搜索器引导
             self.system_prompt = (
                 f"你应该伪装成一个名字为 {self.bot_name} 的人类，而不是什么语言模型或者机器人。\n"
                 + "别人问你“说说你自己吧”之类非常隐私的问题，你应该拒绝回复，并且骂他们，例如“关你屁事”“一点都不想多说”之类的，不过你的语言应该多样点骂，不能翻来覆去都是那几句。\n"
@@ -109,33 +101,27 @@ class GroupRecord:
                 "list_blocked_users",
             ]
         self.mcp_config = mcp_config
-        self.max_logs = max_logs
         self.set(**kwargs)
+        self.rest = self.max_rest
 
         self.tool_manager = ToolManager()
         self._setup_tools()
 
     def _setup_tools(self):
         """设置工具（本地+搜索器），MCP 工具首次调用前懒加载"""
-        # 注册屏蔽用户类工具
-        self.tool_manager.register_tool(
-            BlockTool(self), default="block_user" in self.default_tools
-        )
-        self.tool_manager.register_tool(
-            ListBlockedTool(self), default="list_blocked_users" in self.default_tools
-        )
-        # 注册代码执行类工具
-        self.tool_manager.register_tool(
-            MmaTool(), default="run_mma" in self.default_tools
-        )
-        self.tool_manager.register_tool(
-            PyTool(), default="run_python" in self.default_tools
-        )
-        # 注册群管理类工具
-        self.tool_manager.register_tool(
-            BanUser(self), default="ban_user" in self.default_tools
-        )
-        # MCP 工具首次调用前懒加载
+        tools: list[Tool] = [
+            BlockTool(self),
+            ListBlockedTool(self),
+            MmaTool(),
+            PyTool(),
+            BanUser(self),
+        ]
+        for tool in tools:
+            if tool.get_name() in FORBIDDEN_TOOLS:
+                continue
+            self.tool_manager.register_tool(
+                tool, default=tool.get_name() in self.default_tools
+            )
         self.mcp_loaded = False
 
     async def _load_mcp_tools(self):
@@ -159,6 +145,8 @@ class GroupRecord:
             for c in multi:
                 tools = await c.list_tools()
                 for t in tools:
+                    if t["name"] in FORBIDDEN_TOOLS:
+                        continue
                     self.tool_manager.register_tool(
                         MCPTool(c, t["name"], t["schema"]),
                         default=t["name"] in self.default_tools,
@@ -200,7 +188,6 @@ class GroupRecord:
         min_rest: Optional[int] = None,
         max_rest: Optional[int] = None,
         cd: Optional[float] = None,
-        split: Optional[list] = None,
         max_logs: Optional[int] = None,
         image_mode: Optional[int] = None,
         base64: Optional[bool] = None,
@@ -220,8 +207,6 @@ class GroupRecord:
             self.max_rest = max_rest
         if cd is not None:
             self.cd = timedelta(seconds=cd)
-        if split is not None:
-            self.split = split
         if max_logs is not None:
             self.max_logs = max_logs
         if image_mode is not None:
@@ -251,9 +236,9 @@ class GroupRecord:
         if len(self.msgs) > self.max_logs:
             self.msgs.pop(0)
 
-    def block(self, id: str, delta: Optional[float] = None) -> float:
+    def block(self, id: str, delta: float = 150) -> float:
         try:
-            delta = float(delta or 150)
+            delta = float(delta)
         except Exception:
             delta = 150
 
