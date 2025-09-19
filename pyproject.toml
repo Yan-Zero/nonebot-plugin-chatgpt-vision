@@ -19,11 +19,8 @@ async-tio = "^1.3.2"
 fastmcp = "^2.12.3"
 beautifulsoup4 = "^4.13.5"
 lxml = "^6.0.1"
-weasyprint = "^66.0"
-markdown = "^3.9"
-markdown-katex = "^202406.1035"
-pymupdf = "^1.26.4"
 cairosvg = "^2.8.2"
+typst = "^0.13.7"
 
 
 [build-system]
