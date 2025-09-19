@@ -148,7 +148,7 @@ async def convert_markdown_to_png(markdown: str, url: str) -> bytes | None:
         async with aiohttp.ClientSession() as session:
             async with session.post(
                 url,
-                json={"markdown": markdown},
+                data=markdown.encode("utf-8"),
             ) as response:
                 if response.status != 200:
                     return None
