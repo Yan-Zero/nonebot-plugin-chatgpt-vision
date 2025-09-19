@@ -4,7 +4,9 @@ import json
 import base64
 import aiohttp
 import pathlib
+import cairosvg
 
+from urllib.parse import quote_plus
 from PIL import Image
 from typing import List
 from lxml import etree  # type: ignore
@@ -118,6 +120,27 @@ async def download_image_to_base64(url: str) -> str:
         return url
 
     return url
+
+
+async def convert_tex_to_png_base64(tex: str) -> str | None:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                "https://www.zhihu.com/equation?tex=" + quote_plus(tex)
+            ) as response:
+                if response.status != 200:
+                    return None
+                svg_content = await response.text()
+                png_data = cairosvg.svg2png(
+                    bytestring=svg_content.encode("utf-8"), scale=4
+                )
+                base64_data = base64.b64encode(png_data).decode("utf-8")  # type: ignore
+                return f"data:image/png;base64,{base64_data}"
+    except Exception as e:
+        from nonebot import logger
+
+        logger.error(f"公式渲染失败: {e}")
+        return None
 
 
 def fix_xml(xml: str, convert_face_to_image=True) -> str:
