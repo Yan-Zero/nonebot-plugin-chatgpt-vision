@@ -1,15 +1,17 @@
 import io
 import re
+import fitz
 import json
 import base64
 import aiohttp
 import pathlib
-import cairosvg
 
-from urllib.parse import quote_plus
-from PIL import Image
-from typing import List
+from PIL import Image, ImageChops
 from lxml import etree  # type: ignore
+from typing import List
+from markdown import markdown
+from weasyprint import HTML, default_url_fetcher
+from markdown_katex import KatexExtension
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
 
 USER_NAME_CACHE: dict = {}
@@ -122,32 +124,54 @@ async def download_image_to_base64(url: str) -> str:
     return url
 
 
-async def convert_tex_to_png(tex: str) -> bytes | None:
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://www.zhihu.com/equation?tex=" + quote_plus(tex)
-            ) as response:
-                if response.status != 200:
-                    return None
-                svg_content = await response.text()
-                png_data = cairosvg.svg2png(
-                    bytestring=svg_content.encode("utf-8"),
-                    scale=4,
-                    background_color="#FFFBE6",  # 淡黄色（可换成你想要的 CSS 颜色）
-                )
-                return png_data
-    except Exception as e:
-        from nonebot import logger
+async def convert_markdown(md: str, bg="#FFFBE6", dpi=144) -> bytes:
+    html_body = markdown(md, extensions=[KatexExtension(no_inline_svg=False)])
 
-        logger.error(f"公式渲染失败: {e}")
-        return None
+    html = f"""
+    <!doctype html><meta charset="utf-8">
+    <style>
+      @page {{ size: A4; margin: 0; }}  /* A4只是容器，后面会裁掉空白 */
+      html,body{{background:{bg}; margin:0; padding:24px;
+        font-family:system-ui,-apple-system,"LXGW WenKai","WenQuanYi Zen Hei","Noto Sans CJK SC",sans-serif}}
+      h1{{margin:0 0 12px 0; font-size:28px}}
+      .katex-display{{display:block; margin:1em 0;}}
+      .katex{{font: normal 1.21em KaTeX_Main, "Times New Roman", serif; line-height:1.2}}
+    </style>
+    <body>{html_body}</body>
+    """
+
+    # 2) HTML -> PNG（bytes）
+    def safe_fetcher(url):
+        if url.startswith(("http://", "https://")):
+            raise ValueError("External URLs are blocked")
+        return default_url_fetcher(url)
+
+    pdf_bytes = HTML(string=html, url_fetcher=safe_fetcher).write_pdf()
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    page = doc[0]
+    zoom = dpi / 72.0
+    mat = fitz.Matrix(zoom, zoom)
+    pix = page.get_pixmap(matrix=mat, alpha=True)  # type: ignore
+    png_bytes = pix.tobytes("png")
+    im = Image.open(io.BytesIO(png_bytes)).convert("RGBA")
+    bg_im = Image.new("RGBA", im.size, im.getpixel((0, 0)))
+    diff = ImageChops.difference(im, bg_im)
+    bbox = diff.getbbox()
+    if bbox:
+        im = im.crop(bbox)
+    out = io.BytesIO()
+    im.save(out, format="PNG")
+    return out.getvalue()
 
 
 def fix_xml(xml: str, convert_face_to_image=True) -> str:
     """
     流式把脏“类 XML”规约为**合规 XML 片段**（可能包含多个顶层 <p>）。
     """
+    # 修正错误的 CDATA 起始标记
+    if "<\n![CDATA[" in xml:
+        xml = xml.replace("<\n![CDATA[", "<![CDATA[")
+
     VOID = {"mention", "reply", "image", "face", "br"}
     IGNORE = {"time", "name", "uid"}
     _VISIBLE_TAGS_RE = re.compile(r"<(code|br|mention|reply|image|face|tex)\b", re.I)
@@ -376,7 +400,9 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                         + _to_cdata(code_text)
                         + "</code>"
                     )
-                    self._emit_fragment_into_current_scope(frag)
+                    # 仅当 code 内有可见内容时才输出
+                    if code_text:
+                        self._emit_fragment_into_current_scope(frag)
                     self.code_buf.clear()
                     self.code_lang = "text"
                     self.in_code = False
@@ -388,9 +414,11 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 if tag == "tex":
                     if self.skip_stack and self.skip_stack[-1] == "tex":
                         self.skip_stack.pop()
-                    tex_text = "".join(self.tex_buf).strip()
+                    tex_text = "".join(self.tex_buf).strip().strip("$")
                     frag = "<tex>" + _escape_text(tex_text) + "</tex>"
-                    self._emit_fragment_into_current_scope(frag)
+                    # 仅当 tex 内有可见内容时才输出
+                    if tex_text:
+                        self._emit_fragment_into_current_scope(frag)
                     self.tex_buf.clear()
                     self.in_tex = False
                 else:
@@ -427,15 +455,17 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                     + _to_cdata(code_text)
                     + "</code>"
                 )
-                self._emit_fragment_into_current_scope(frag)
+                if code_text:
+                    self._emit_fragment_into_current_scope(frag)
                 self.code_buf.clear()
                 self.in_code = False
                 self.code_lang = "text"
 
             if self.in_tex:
-                tex_text = "".join(self.tex_buf).strip()
+                tex_text = "".join(self.tex_buf).strip().strip("$")
                 frag = "<tex>" + _escape_text(tex_text) + "</tex>"
-                self._emit_fragment_into_current_scope(frag)
+                if tex_text:
+                    self._emit_fragment_into_current_scope(frag)
                 self.tex_buf.clear()
                 self.in_tex = False
 

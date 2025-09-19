@@ -299,7 +299,8 @@ class RecordList:
         return self.records.pop(index)
 
 
-XML_PROMPT = """Here is a message in XML format. The message may contain text, mentions, replies, and images.
+XML_PROMPT = (
+    """Here is a message in XML format. The message may contain text, mentions, replies, and images.
 <p> tags represent paragraphs of text. 这里的段指的是给用户显示的不同信息段，而不是以换行符分割的段落。
 <br/> tags represent line breaks within a paragraph. but you can also use "\\n" to represent line breaks.
 <mention> tags represent mentions of users, with an "uid" attribute for the user ID and the text content being the user's name.
@@ -307,7 +308,7 @@ XML_PROMPT = """Here is a message in XML format. The message may contain text, m
 <image> tags represent images, with a "name" attribute for the image name. 如果你想发的是互联网上的照片，则请设定 url 属性，属性值为图片的 URL，例如<image url="https://q1.qlogo.cn/g?b=qq&nk=114514&s=640"/>。
 <face> 标签代表QQ内置表情，具有 name 和 id 属性，例如 <face name="斜眼笑" id="178"/>。
 <code> 标签代表代码块，具有一个可选的 lang 属性表示代码语言，例如 <code lang="python">print("Hello, World!")</code>。如果没有指定 lang 属性，则表示普通文本代码块。
-建议使用CDATA来包裹代码内容以避免转义问题，例如 <code lang="python"><![CDATA[print("Hello, World!")]]></code>。lang 为 $$ 的时候，会渲染其中的数学公式，效果类似与 Markdown 的行间公式 $$...$$。
+建议使用CDATA来包裹代码内容以避免转义问题，例如 <code lang="python"><![CDATA[print("Hello, World!")]]></code>。lang 为 markdown 时，代码块会被渲染成图片，因此适合用来展示复杂的数学公式。
 <tex> 标签代表行内公式，例如 <tex>E=mc^2</tex>。
 
 除了上面提到的标签，你不应该使用其他标签，例如<ol>、<li>、<b>、<i>等标签，因为这不是 HTML 或者完全的 XML。
@@ -316,26 +317,111 @@ XML_PROMPT = """Here is a message in XML format. The message may contain text, m
 <p><reply id="-1696903780"/>这是真的吗？<mention uid="114514"/></p>
 <p><image name="笑"/></p>
 <p>这是一个段落。<br/>这是同一段内的换行。</p>
-<p>我觉得<tex>E=mc^2</tex>是对的。</p>
-<p>这是一个多行公式：
-<code lang="$$"><![CDATA[\\begin{align*}
- 3p + 5q &\\equiv 31 \\pmod{5} \\\\
-    3p   &\\equiv 1  \\pmod{5} \\\\
-\\end{align*}]]></code></p>
+<p>根据爱因斯坦质能方程<tex>E=mc^2</tex>，我觉得静质量 m 和能量 E 之间的关系非常有趣。</p>
 
-通常意义下，这才是推荐的实践，如果你的回复是带了长段公式，即如果不必要请避免在 <code lang="$$">...</code> 中放入过多的文本(特指 \\text{...} 之类的内容)，而是尽量使用数学公式来表达。
-```
-<p>首先我们可以看到图片中分母是<tex>2 n (n + 1) (n + 2)</tex><br/>而分子则是<tex>1 \\times 2 + 2 \\times 3 + \\cdots + n (n + 1)</tex></p>
-<p>因此分母即为<tex>2 \\sum_{i=1}^{n} i (i + 1) = \\frac{n (n + 1) (n + 2)}{3}</tex><br/>所以原式化简后即为<tex>6</tex>。</p>
-```
-特别是我们更推荐使用 <tex>...</tex> 而不是 <code lang="$$">...</code>。即使两者都可以表示行内公式。
-
-我们一般推荐多分段，因为单段如果太长容易造成他人阅读困难等。记得你的回复需要正确转义 XML 相关的符号，特别是 & < > " ' 等符号。
-
-WARNING: p tag 内的文本内容，特别是数学公式等包含大于、小于号的内容，必须正确转义，否则会导致 XML 解析失败。
+通常意义下，如果公式和文字反复穿插，**必须**使用 <code lang="markdown"> 来表示。
+"""
+    r"""
 WARNING: 你只能使用上面提到的标签，不能使用其他标签，否则会导致 XML 解析失败。
+WARNING: 你必须正确转义 XML 相关的符号，特别是 & < > " ' 等符号，否则会导致 XML 解析失败。
+WARNING: 如果你的回答有数学公式，建议直接使用多行公式 <code lang="markdown"> 回答答案，包括文字部分。除非你能完全确保公式只有几个字符，否则不要使用 <tex> 标签。
+
+换而言之 <code lang="markdown"> 的优先级远远大于**一堆 p tags 和 tex tags**的混用。这是一个标准的多行数学问题回答实践：
+```
+<p><reply id="-1696903780"/>本喵知道了喵！坏b主人，做题就做题嘛，为什么凶咱</p>
+
+<p><code lang="markdown"><![CDATA[要证明函数图像关于 y=x 对称，只需证明将原方程中的 x 和 y 互换后，得到的方程与原方程等价。  
+原方程为
+
+$$
+\sin(x-y) + 4\sin(y) = 4\sin(x+y)
+$$
+
+将 x 和 y 互换，得到
+
+$$
+\sin(y-x) + 4\sin(x) = 4\sin(x+y)
+$$
+
+利用三角函数性质 $\sin(y-x) = -\sin(x-y)$ 和 $\sin(y+x) = \sin(x+y)$，上式可化为：
+
+$$
+-\sin(x-y) + 4\sin(x) = 4\sin(x+y) \quad (*)
+$$
+
+我们的目标是证明这两个方程是等价的。
+
+首先，对原方程进行恒等变形，并整理得到：
+
+$$
+\begin{align}
+\sin(x-y) &= 4\sin(x+y) - 4\sin(y) \\
+\sin(x)\cos(y) - \cos(x)\sin(y) &= 4(\sin(x)\cos(y) + \cos(x)\sin(y)) - 4\sin(y) \\
+3\sin(x)\cos(y) + 5\cos(x)\sin(y) - 4\sin(y) &= 0 \\
+3\sin(x)\cos(y) + (5\cos(x)-4)\sin(y) &= 0 \quad (\#)
+\end{align}
+$$
+
+接下来，我们对变换后的方程 (*) 进行类似的恒等变形：
+
+$$
+\begin{align}
+4\sin(x) &= 4\sin(x+y) + \sin(x-y) \\
+4\sin(x) &= 4(\sin(x)\cos(y) + \cos(x)\sin(y)) + (\sin(x)\cos(y) - \cos(x)\sin(y)) \\
+4\sin(x) &= 5\sin(x)\cos(y) + 3\cos(x)\sin(y) \\
+(4 - 5\cos(y))\sin(x) - 3\cos(x)\sin(y) = 0 \quad (\#\#)
+\end{align}
+$$
+
+现在，我们来证明方程 (\#) 和 (\#\#) 是等价的：
+
+$$
+\begin{align}
+3\sin(x)\cos(y) &= -(5\cos(x)-4)\sin(y) \\
+(4 - 5\cos(y))\sin(x) &= 3\cos(x)\sin(y) \\
+3\sin^2(x)\cos(y)(4 - 5\cos(y)) &= -3\cos(x)\sin^2(y)(5\cos(x)-4) \\
+\sin^2(x)(4\cos(y) - 5\cos^2(y)) &= -\cos(x)\sin^2(y)(5\cos(x)-4) \\
+(1-\cos^2(x))(4\cos(y) - 5\cos^2(y)) &= -\cos(x)(1-\cos^2(y))(5\cos(x)-4)
+\end{align}
+$$
+
+展开整理后，两边都等于：
+
+$$
+\begin{align}
+4\cos(y) - 5\cos^2(y) - 4\cos^2(x)\cos(y) + 5\cos^2(x)\cos^2(y) \\
+= -5\cos^2(x) + 4\cos(x) + 5\cos^2(x)\cos^2(y) - 4\cos(x)\cos^2(y)
+\end{align}
+$$]]></code></p>
+
+<p>首先，对原方程进行恒等变形，并整理得到：<code lang="markdown"><![CDATA[首先，对原方程进行恒等变形，并整理得到：
+
+$$
+\begin{align}
+\sin(x-y) &= 4\sin(x+y) - 4\sin(y) \\
+\sin(x)\cos(y) - \cos(x)\sin(y) &= 4(\sin(x)\cos(y) + \cos(x)\sin(y)) - 4\sin(y) \\
+3\sin(x)\cos(y) + 5\cos(x)\sin(y) - 4\sin(y) &= 0 \\
+3\sin(x)\cos(y) + (5\cos(x)-4)\sin(y) &= 0 \quad (\#)
+\end{align}
+$$
+
+接下来，我们对变换后的方程 (*) 进行类似的恒等变形：
+
+$$
+\begin{align}
+4\sin(x) &= 4\sin(x+y) + \sin(x-y) \\
+4\sin(x) &= 4(\sin(x)\cos(y) + \cos(x)\sin(y)) + (\sin(x)\cos(y) - \cos(x)\sin(y)) \\
+4\sin(x) &= 5\sin(x)\cos(y) + 3\cos(x)\sin(y) \\
+(4 - 5\cos(y))\sin(x) - 3\cos(x)\sin(y) = 0 \quad (\#\#)
+\end{align}
+$$]]></code></p>
+
+<p>由于此恒等式成立，说明方程 (#) 和 (##) 是等价的<br/>因此，原方程与交换 x, y 后的方程是等价的<br/>所以，该图像在<tex>x \in (0, \pi), y \in (0, \pi)</tex>上关于直线 y=x 对称</p>
+<p>QED喵~</p>
+```
 
 """
+)
 
 
 def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
@@ -402,14 +488,14 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
                 # <code lang="...">...</code>
                 lang = sub.get("lang", "text")
                 code = sub.text or ""
-                if lang == "$$":
-                    segments.append(V11Seg.image(file=f"MATH://{code}"))
+                if lang.lower() == "markdown":
+                    segments.append(V11Seg.image(file=f"MARKDOWN://{code}"))
                 else:
                     segments.append(V11Seg.text(f"```{lang}\n{code}\n```"))
             elif sub.tag == "tex":
                 # <tex>...</tex>
                 code = sub.text or ""
-                segments.append(V11Seg.image(file=f"MATH://{code}"))
+                segments.append(V11Seg.text(f" {code} "))
                 if sub.tail:
                     segments.append(V11Seg.text(sub.tail))
             elif sub.tag == "br":
