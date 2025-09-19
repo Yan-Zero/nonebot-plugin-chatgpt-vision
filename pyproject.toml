@@ -8,7 +8,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-nonebot2 = "^2.3.0"
+nonebot2 = "^2.4.0"
 nonebot-adapter-onebot = "^2.4.3"
 PyYAML = "^6.0.1"
 openai = "^1.30.1"
@@ -20,7 +20,6 @@ fastmcp = "^2.12.3"
 beautifulsoup4 = "^4.13.5"
 lxml = "^6.0.1"
 cairosvg = "^2.8.2"
-typst = "^0.13.7"
 
 
 [build-system]

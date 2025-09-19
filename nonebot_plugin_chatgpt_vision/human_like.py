@@ -2,7 +2,6 @@ import os
 import re
 import yaml
 import random
-import asyncio
 import pathlib
 
 from datetime import datetime
@@ -25,7 +24,6 @@ from .group import GroupRecord, SpecialOperation
 from .utils import (
     USER_NAME_CACHE,
     check_url_stutas,
-    convert_typst,
     convert_tex_to_png,
 )
 from .config import p_config
@@ -111,15 +109,6 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                 else:
                     seg.type = "text"
                     seg.data = {"text": f"${code}$"}
-                continue
-            elif name.startswith("TYPST://"):
-                code = name[11:]
-                png = await asyncio.to_thread(convert_typst, code)
-                if png:
-                    seg.data = V11Seg.image(file=png).data
-                else:
-                    seg.type = "text"
-                    seg.data = {"text": "```markdown\n" + code + "\n```"}
                 continue
             if not name.startswith("FOUND://"):
                 continue

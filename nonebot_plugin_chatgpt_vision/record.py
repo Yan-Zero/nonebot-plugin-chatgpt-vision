@@ -330,68 +330,94 @@ WARNING: 如果你的回答有数学公式，建议直接使用多行公式 <cod
 ```
 <p><reply id="-1696903780"/>本喵知道了喵！坏b主人，做题就做题嘛，为什么凶咱</p>
 
-<p><code lang="typst"><![CDATA[
-要证明函数图像关于 y = x 对称，只需证明将原方程中的 x 和 y 互换后，得到的方程与原方程等价。  
+<p><code lang="markdown"><![CDATA[要证明函数图像关于 y=x 对称，只需证明将原方程中的 x 和 y 互换后，得到的方程与原方程等价。  
+原方程为
 
-原方程为：
+$$
+\sin(x-y) + 4\sin(y) = 4\sin(x+y)
+$$
 
-#math(display: sin(x - y) + 4 * sin(y) = 4 * sin(x + y))
+将 x 和 y 互换，得到
 
-将 x 和 y 互换，得到：
+$$
+\sin(y-x) + 4\sin(x) = 4\sin(x+y)
+$$
 
-#math(display: sin(y - x) + 4 * sin(x) = 4 * sin(x + y))
+利用三角函数性质 $\sin(y-x) = -\sin(x-y)$ 和 $\sin(y+x) = \sin(x+y)$，上式可化为：
 
-利用三角函数性质 #math(sin(y - x) = -sin(x - y)) 和 #math(sin(y + x) = sin(x + y))，上式可化为：
+$$
+-\sin(x-y) + 4\sin(x) = 4\sin(x+y) \quad (*)
+$$
 
-#math(display: -sin(x - y) + 4 * sin(x) = 4 * sin(x + y)) \ (*)
-]]></code></p>
+我们的目标是证明这两个方程是等价的。
 
-<p><code lang="typst"><![CDATA[
-= 对原方程进行恒等变形
+首先，对原方程进行恒等变形，并整理得到：
 
-#align(
-  sin(x - y) &= 4 * sin(x + y) - 4 * sin(y) \
-  sin(x) * cos(y) - cos(x) * sin(y) &= 4 * (sin(x)*cos(y)+cos(x)*sin(y)) - 4*sin(y) \
-  3*sin(x)*cos(y) + 5*cos(x)*sin(y) - 4*sin(y) &= 0 \
-  3*sin(x)*cos(y) + (5*cos(x)-4)*sin(y) &= 0 \ (#)
-)
-]]></code></p>
+$$
+\begin{align}
+\sin(x-y) &= 4\sin(x+y) - 4\sin(y) \\
+\sin(x)\cos(y) - \cos(x)\sin(y) &= 4(\sin(x)\cos(y) + \cos(x)\sin(y)) - 4\sin(y) \\
+3\sin(x)\cos(y) + 5\cos(x)\sin(y) - 4\sin(y) &= 0 \\
+3\sin(x)\cos(y) + (5\cos(x)-4)\sin(y) &= 0 \quad (\#)
+\end{align}
+$$
 
-<p><code lang="typst"><![CDATA[
-= 对变换后的方程 (*) 进行恒等变形
+接下来，我们对变换后的方程 (*) 进行类似的恒等变形：
 
-#align(
-  4*sin(x) &= 4*sin(x+y) + sin(x-y) \
-  4*sin(x) &= 4*(sin(x)*cos(y)+cos(x)*sin(y)) + (sin(x)*cos(y)-cos(x)*sin(y)) \
-  4*sin(x) &= 5*sin(x)*cos(y) + 3*cos(x)*sin(y) \
-  (4 - 5*cos(y))*sin(x) - 3*cos(x)*sin(y) = 0 \ (##)
-)
-]]></code></p>
+$$
+\begin{align}
+4\sin(x) &= 4\sin(x+y) + \sin(x-y) \\
+4\sin(x) &= 4(\sin(x)\cos(y) + \cos(x)\sin(y)) + (\sin(x)\cos(y) - \cos(x)\sin(y)) \\
+4\sin(x) &= 5\sin(x)\cos(y) + 3\cos(x)\sin(y) \\
+(4 - 5\cos(y))\sin(x) - 3\cos(x)\sin(y) = 0 \quad (\#\#)
+\end{align}
+$$
 
-<p><code lang="typst"><![CDATA[
-= 证明 (#) 与 (##) 等价
+现在，我们来证明方程 (\#) 和 (\#\#) 是等价的：
 
-#align(
-  3*sin(x)*cos(y) &= -(5*cos(x)-4)*sin(y) \
-  (4-5*cos(y))*sin(x) &= 3*cos(x)*sin(y) \
-  3*sin(x)^2*cos(y)*(4-5*cos(y)) &= -3*cos(x)*sin(y)^2*(5*cos(x)-4) \
-  sin(x)^2*(4*cos(y)-5*cos(y)^2) &= -cos(x)*sin(y)^2*(5*cos(x)-4) \
-  (1-cos(x)^2)*(4*cos(y)-5*cos(y)^2) &= -cos(x)*(1-cos(y)^2)*(5*cos(x)-4)
-)
+$$
+\begin{align}
+3\sin(x)\cos(y) &= -(5\cos(x)-4)\sin(y) \\
+(4 - 5\cos(y))\sin(x) &= 3\cos(x)\sin(y) \\
+3\sin^2(x)\cos(y)(4 - 5\cos(y)) &= -3\cos(x)\sin^2(y)(5\cos(x)-4) \\
+\sin^2(x)(4\cos(y) - 5\cos^2(y)) &= -\cos(x)\sin^2(y)(5\cos(x)-4) \\
+(1-\cos^2(x))(4\cos(y) - 5\cos^2(y)) &= -\cos(x)(1-\cos^2(y))(5\cos(x)-4)
+\end{align}
+$$
 
 展开整理后，两边都等于：
 
-#align(
-  4*cos(y) - 5*cos(y)^2 - 4*cos(x)^2*cos(y) + 5*cos(x)^2*cos(y)^2 \
-  = -5*cos(x)^2 + 4*cos(x) + 5*cos(x)^2*cos(y)^2 - 4*cos(x)*cos(y)^2
-)
-]]></code></p>
+$$
+\begin{align}
+4\cos(y) - 5\cos^2(y) - 4\cos^2(x)\cos(y) + 5\cos^2(x)\cos^2(y) \\
+= -5\cos^2(x) + 4\cos(x) + 5\cos^2(x)\cos^2(y) - 4\cos(x)\cos^2(y)
+\end{align}
+$$]]></code></p>
 
-<p>由于此恒等式成立，说明方程 (#) 和 (##) 是等价的  
-因此，原方程与交换 x, y 后的方程是等价的  
-所以，该图像在 <code lang="typst">#math(x ∈ (0, π), y ∈ (0, π))</code> 上关于直线 y=x 对称</p>
+<p>首先，对原方程进行恒等变形，并整理得到：<code lang="markdown"><![CDATA[首先，对原方程进行恒等变形，并整理得到：
 
-<p>QED 喵~</p>
+$$
+\begin{align}
+\sin(x-y) &= 4\sin(x+y) - 4\sin(y) \\
+\sin(x)\cos(y) - \cos(x)\sin(y) &= 4(\sin(x)\cos(y) + \cos(x)\sin(y)) - 4\sin(y) \\
+3\sin(x)\cos(y) + 5\cos(x)\sin(y) - 4\sin(y) &= 0 \\
+3\sin(x)\cos(y) + (5\cos(x)-4)\sin(y) &= 0 \quad (\#)
+\end{align}
+$$
+
+接下来，我们对变换后的方程 (*) 进行类似的恒等变形：
+
+$$
+\begin{align}
+4\sin(x) &= 4\sin(x+y) + \sin(x-y) \\
+4\sin(x) &= 4(\sin(x)\cos(y) + \cos(x)\sin(y)) + (\sin(x)\cos(y) - \cos(x)\sin(y)) \\
+4\sin(x) &= 5\sin(x)\cos(y) + 3\cos(x)\sin(y) \\
+(4 - 5\cos(y))\sin(x) - 3\cos(x)\sin(y) = 0 \quad (\#\#)
+\end{align}
+$$]]></code></p>
+
+<p>由于此恒等式成立，说明方程 (#) 和 (##) 是等价的<br/>因此，原方程与交换 x, y 后的方程是等价的<br/>所以，该图像在<tex>x \in (0, \pi), y \in (0, \pi)</tex>上关于直线 y=x 对称</p>
+<p>QED喵~</p>
 ```
 
 """
@@ -462,8 +488,8 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
                 # <code lang="...">...</code>
                 lang = sub.get("lang", "text")
                 code = sub.text or ""
-                if lang.lower() == "typst":
-                    segments.append(V11Seg.image(file=f"TYPST://{code}"))
+                if lang.lower() == "markdown":
+                    segments.append(V11Seg.image(file=f"MARKDOWN://{code}"))
                 else:
                     segments.append(V11Seg.text(f"```{lang}\n{code}\n```"))
             elif sub.tag == "tex":

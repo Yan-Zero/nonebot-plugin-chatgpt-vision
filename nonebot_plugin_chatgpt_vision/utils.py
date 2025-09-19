@@ -1,7 +1,6 @@
 import io
 import re
 import json
-import typst
 import base64
 import aiohttp
 import pathlib
@@ -134,7 +133,7 @@ async def convert_tex_to_png(tex: str) -> bytes | None:
                 svg_content = await response.text()
                 png_data = cairosvg.svg2png(
                     bytestring=svg_content.encode("utf-8"),
-                    scale=1,
+                    scale=2,
                     background_color="#FFFBE6",  # 淡黄色（可换成你想要的 CSS 颜色）
                 )
                 return png_data
@@ -143,15 +142,6 @@ async def convert_tex_to_png(tex: str) -> bytes | None:
 
         logger.error(f"公式渲染失败: {e}")
         return None
-
-
-def convert_typst(src: str, bg="#FFFBE6") -> bytes | None:
-    svg = typst.compile(src.encode("utf-8"), format="svg", ppi=200)
-    png_data = cairosvg.svg2png(
-        bytestring=svg,
-        background_color=bg,  # 淡黄色（可换成你想要的 CSS 颜色）
-    )
-    return png_data
 
 
 def fix_xml(xml: str, convert_face_to_image=True) -> str:
