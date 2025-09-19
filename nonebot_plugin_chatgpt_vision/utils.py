@@ -150,8 +150,7 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
     """
     VOID = {"mention", "reply", "image", "face", "br"}
     IGNORE = {"time", "name", "uid"}
-    # NEW: 判定“可见内容”的简易正则（存在非空白，或出现这些可见标记）
-    _VISIBLE_TAGS_RE = re.compile(r"<(code|br|mention|reply|image|face)\b", re.I)
+    _VISIBLE_TAGS_RE = re.compile(r"<(code|br|mention|reply|image|face|tex)\b", re.I)
 
     def _escape_text(s: str) -> str:
         if not s:
@@ -159,15 +158,18 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
         s = s.replace("&nbsp;", " ").replace("\u00a0", " ")
         return _xml_escape(s)
 
-    # NEW: outside/cur 是否有“可见内容”
+    def _to_cdata(s: str) -> str:
+        if not s:
+            return ""
+        s = s.replace("&nbsp;", " ").replace("\u00a0", " ")
+        return f"<![CDATA[{s.replace(']]>', ']]]]><![CDATA[>')}]]>"
+
     def _has_visible(fragment: str) -> bool:
         if not fragment:
             return False
-        # 去掉所有 XML 标签再看是否有非空白
         text_only = re.sub(r"<[^>]+>", "", fragment)
         if text_only.strip():
             return True
-        # 或包含可见的自闭合/块级标记
         return bool(_VISIBLE_TAGS_RE.search(fragment))
 
     class _Target:
@@ -181,6 +183,8 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
             self.code_buf: List[str] = []
             self.skip_stack: List[str] = []
             self.reply_seen_in_p: bool = False
+            self.in_tex: bool = False
+            self.tex_buf: List[str] = []
 
         def _append_text(self, s: str):
             if not s:
@@ -188,14 +192,15 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
             if self.in_code:
                 self.code_buf.append(s)
                 return
+            if self.in_tex:
+                self.tex_buf.append(s)
+                return
             if self.p_depth > 0:
                 self.cur.append(_escape_text(s))
             else:
-                # NEW: p 外的纯空白一律丢弃，避免生成空 <p>
                 s_norm = s.replace("&nbsp;", " ").replace("\u00a0", " ")
                 if s_norm.strip():
                     self.outside.append(_escape_text(s_norm))
-                # else: 忽略
 
         def _emit_fragment_into_current_scope(self, frag: str):
             if not frag:
@@ -277,12 +282,20 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
             if tag == "root":
                 return
 
+            # 在 code/tex 模式下，任何标签都按字面写入缓冲
             if self.in_code:
                 frag = "<" + tag
                 for k, v in (attrs or {}).items():
                     frag += f" {k}={_xml_q(v)}"
                 frag += ">"
                 self.code_buf.append(frag)
+                return
+            if self.in_tex:
+                frag = "<" + tag
+                for k, v in (attrs or {}).items():
+                    frag += f" {k}={_xml_q(v)}"
+                frag += ">"
+                self.tex_buf.append(frag)
                 return
 
             if tag in IGNORE:
@@ -298,7 +311,6 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 if tag == "reply":
                     if self.p_depth > 0:
                         if self.reply_seen_in_p:
-                            # 第二个及以后 reply：切段
                             self._flush_p()
                         self._emit_fragment_into_current_scope(frag)
                         self.reply_seen_in_p = True
@@ -318,6 +330,13 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 self.skip_stack.append("code")
                 return
 
+            # —— 新增：进入 tex 模式 ——
+            if tag == "tex":
+                self.in_tex = True
+                self.tex_buf.clear()
+                self.skip_stack.append("tex")
+                return
+
             if tag == "p":
                 if self.p_depth == 0 and self.outside:
                     # 先把 p 外的内容按可见性打包
@@ -334,6 +353,7 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 return
             if (
                 (not self.in_code)
+                and (not self.in_tex)
                 and self.skip_stack
                 and self.skip_stack[-1] in (IGNORE | VOID | {"code"})
             ):
@@ -348,12 +368,12 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 if tag == "code":
                     if self.skip_stack and self.skip_stack[-1] == "code":
                         self.skip_stack.pop()
-                    code_text = "".join(self.code_buf)
+                    code_text = "".join(self.code_buf).strip()
                     frag = (
                         "<code lang="
                         + _xml_q(self.code_lang or "text")
                         + ">"
-                        + _escape_text(code_text)
+                        + _to_cdata(code_text)
                         + "</code>"
                     )
                     self._emit_fragment_into_current_scope(frag)
@@ -362,6 +382,19 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                     self.in_code = False
                 else:
                     self.code_buf.append(f"</{tag}>")
+                return
+
+            if self.in_tex:
+                if tag == "tex":
+                    if self.skip_stack and self.skip_stack[-1] == "tex":
+                        self.skip_stack.pop()
+                    tex_text = "".join(self.tex_buf).strip()
+                    frag = "<tex>" + _escape_text(tex_text) + "</tex>"
+                    self._emit_fragment_into_current_scope(frag)
+                    self.tex_buf.clear()
+                    self.in_tex = False
+                else:
+                    self.tex_buf.append(f"</{tag}>")
                 return
 
             if self.skip_stack:
@@ -386,21 +419,25 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
 
         def close(self) -> str:
             if self.in_code:
-                code_text = "".join(self.code_buf)
-                if self.code_lang == "$" and code_text.endswith("$"):
-                    # 避免行内公式末尾多一个 $，防止 AI 犯蠢
-                    code_text = code_text[:-1]
+                code_text = "".join(self.code_buf).strip()
                 frag = (
                     "<code lang="
                     + _xml_q(self.code_lang or "text")
                     + ">"
-                    + _escape_text(code_text)
+                    + _to_cdata(code_text)
                     + "</code>"
                 )
                 self._emit_fragment_into_current_scope(frag)
                 self.code_buf.clear()
                 self.in_code = False
                 self.code_lang = "text"
+
+            if self.in_tex:
+                tex_text = "".join(self.tex_buf).strip()
+                frag = "<tex>" + _escape_text(tex_text) + "</tex>"
+                self._emit_fragment_into_current_scope(frag)
+                self.tex_buf.clear()
+                self.in_tex = False
 
             if self.p_depth > 0:
                 self.p_depth = 0

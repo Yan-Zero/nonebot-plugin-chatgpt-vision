@@ -307,8 +307,8 @@ XML_PROMPT = """Here is a message in XML format. The message may contain text, m
 <image> tags represent images, with a "name" attribute for the image name. 如果你想发的是互联网上的照片，则请设定 url 属性，属性值为图片的 URL，例如<image url="https://q1.qlogo.cn/g?b=qq&nk=114514&s=640"/>。
 <face> 标签代表QQ内置表情，具有 name 和 id 属性，例如 <face name="斜眼笑" id="178"/>。
 <code> 标签代表代码块，具有一个可选的 lang 属性表示代码语言，例如 <code lang="python">print("Hello, World!")</code>。如果没有指定 lang 属性，则表示普通文本代码块。
-建议使用CDATA来包裹代码内容以避免转义问题，例如 <code lang="python"><![CDATA[print("Hello, World!")]]></code>。
-lang 为 $ 的时候，会渲染其中的数学公式，效果类似与 Markdown 的行内公式 $...$。lang 为 $$ 则为多行数学公式。
+建议使用CDATA来包裹代码内容以避免转义问题，例如 <code lang="python"><![CDATA[print("Hello, World!")]]></code>。lang 为 $$ 的时候，会渲染其中的数学公式，效果类似与 Markdown 的行间公式 $$...$$。
+<tex> 标签代表行内公式，例如 <tex>E=mc^2</tex>。
 
 除了上面提到的标签，你不应该使用其他标签，例如<ol>、<li>、<b>、<i>等标签，因为这不是 HTML 或者完全的 XML。
 
@@ -316,21 +316,19 @@ lang 为 $ 的时候，会渲染其中的数学公式，效果类似与 Markdown
 <p><reply id="-1696903780"/>这是真的吗？<mention uid="114514"/></p>
 <p><image name="笑"/></p>
 <p>这是一个段落。<br/>这是同一段内的换行。</p>
-<p>我觉得<code lang="$">E=mc^2</code>是对的。</p>
+<p>我觉得<tex>E=mc^2</tex>是对的。</p>
 <p>这是一个多行公式：
-<code lang="$$"><![CDATA[
-\\begin{align*}
+<code lang="$$"><![CDATA[\\begin{align*}
  3p + 5q &\\equiv 31 \\pmod{5} \\\\
     3p   &\\equiv 1  \\pmod{5} \\\\
-\\end{align*}
-]]></code></p>
+\\end{align*}]]></code></p>
 
 通常意义下，这才是推荐的实践，如果你的回复是带了长段公式，即如果不必要请避免在 <code lang="$$">...</code> 中放入过多的文本(特指 \\text{...} 之类的内容)，而是尽量使用数学公式来表达。
 ```
-<p>首先我们可以看到图片中分母是<code lang="$">2 n (n + 1) (n + 2)</code><br/>而分子则是<code lang="$">1 \\times 2 + 2 \\times 3 + \\cdots + n (n + 1)</code></p>
-<p>因此分母即为<code lang="$">2 \\sum_{i=1}^{n} i (i + 1) = \\frac{n (n + 1) (n + 2)}{3}</code><br/>所以原式化简后即为<code lang="$">6</code>。</p>
+<p>首先我们可以看到图片中分母是<tex>2 n (n + 1) (n + 2)</tex><br/>而分子则是<tex>1 \\times 2 + 2 \\times 3 + \\cdots + n (n + 1)</tex></p>
+<p>因此分母即为<tex>2 \\sum_{i=1}^{n} i (i + 1) = \\frac{n (n + 1) (n + 2)}{3}</tex><br/>所以原式化简后即为<tex>6</tex>。</p>
 ```
-特别是我们更推荐使用 <code lang="$">...</code> 而不是 <code lang="$$">...</code>。即使两者都可以表示行内公式。
+特别是我们更推荐使用 <tex>...</tex> 而不是 <code lang="$$">...</code>。即使两者都可以表示行内公式。
 
 我们一般推荐多分段，因为单段如果太长容易造成他人阅读困难等。记得你的回复需要正确转义 XML 相关的符号，特别是 & < > " ' 等符号。
 
@@ -404,10 +402,16 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
                 # <code lang="...">...</code>
                 lang = sub.get("lang", "text")
                 code = sub.text or ""
-                if lang == "$" or lang == "$$":
+                if lang == "$$":
                     segments.append(V11Seg.image(file=f"MATH://{code}"))
                 else:
                     segments.append(V11Seg.text(f"```{lang}\n{code}\n```"))
+            elif sub.tag == "tex":
+                # <tex>...</tex>
+                code = sub.text or ""
+                segments.append(V11Seg.image(file=f"MATH://{code}"))
+                if sub.tail:
+                    segments.append(V11Seg.text(sub.tail))
             elif sub.tag == "br":
                 segments.append(V11Seg.text("\n"))
                 if sub.tail:
