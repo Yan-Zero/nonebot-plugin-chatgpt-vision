@@ -6,10 +6,11 @@ import aiohttp
 import pathlib
 import cairosvg
 
-from urllib.parse import quote_plus
 from PIL import Image
 from lxml import etree  # type: ignore
 from typing import List
+from nonebot import logger
+from urllib.parse import quote_plus
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
 
 USER_NAME_CACHE: dict = {}
@@ -138,9 +139,23 @@ async def convert_tex_to_png(tex: str) -> bytes | None:
                 )
                 return png_data
     except Exception as e:
-        from nonebot import logger
-
         logger.error(f"公式渲染失败: {e}")
+        return None
+
+
+async def convert_markdown_to_png(markdown: str, url: str) -> bytes | None:
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                url,
+                json={"markdown": markdown},
+            ) as response:
+                if response.status != 200:
+                    return None
+                png_data = await response.read()
+                return png_data
+    except Exception as e:
+        logger.error(f"Markdown渲染失败: {e}")
         return None
 
 

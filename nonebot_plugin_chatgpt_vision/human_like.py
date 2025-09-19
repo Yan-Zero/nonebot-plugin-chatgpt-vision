@@ -25,6 +25,7 @@ from .utils import (
     USER_NAME_CACHE,
     check_url_stutas,
     convert_tex_to_png,
+    convert_markdown_to_png,
 )
 from .config import p_config
 from .picsql import randpic
@@ -109,6 +110,19 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                 else:
                     seg.type = "text"
                     seg.data = {"text": f"${code}$"}
+                continue
+            elif name.startswith("MARKDOWN://"):
+                code = name[11:]
+                if not p_config.markdown_server:
+                    seg.type = "text"
+                    seg.data = {"text": code}
+                    continue
+                png = await convert_markdown_to_png(code, p_config.markdown_server)
+                if png:
+                    seg.data = V11Seg.image(file=png).data
+                else:
+                    seg.type = "text"
+                    seg.data = {"text": "```markdown\n" + code + "\n```"}
                 continue
             if not name.startswith("FOUND://"):
                 continue

@@ -50,7 +50,10 @@ class Config(BaseModel):
 
     # 额外：集中 YAML 配置多个 MCP 源
     mcp_config_file: str = "configs/chatgpt-vision/mcp.yaml"
-    """ YAML 文件路径，支持同时配置多个 stdio/SSE MCP 源（唯一入口） """
+    """ YAML 文件路径，支持同时配置多个 stdio/SSE MCP 源 """
+
+    markdown_server: str = ""
+    """ Markdown 渲染服务器，若为空则不渲染 """
 
 
 p_config: Config = get_plugin_config(Config)
