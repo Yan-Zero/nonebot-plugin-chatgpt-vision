@@ -122,7 +122,7 @@ async def download_image_to_base64(url: str) -> str:
     return url
 
 
-async def convert_tex_to_png_base64(tex: str) -> str | None:
+async def convert_tex_to_png(tex: str) -> bytes | None:
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(
@@ -132,10 +132,11 @@ async def convert_tex_to_png_base64(tex: str) -> str | None:
                     return None
                 svg_content = await response.text()
                 png_data = cairosvg.svg2png(
-                    bytestring=svg_content.encode("utf-8"), scale=4
+                    bytestring=svg_content.encode("utf-8"),
+                    scale=4,
+                    background_color="#FFFBE6",  # 淡黄色（可换成你想要的 CSS 颜色）
                 )
-                base64_data = base64.b64encode(png_data).decode("utf-8")  # type: ignore
-                return f"data:image/png;base64,{base64_data}"
+                return png_data
     except Exception as e:
         from nonebot import logger
 
@@ -386,6 +387,9 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
         def close(self) -> str:
             if self.in_code:
                 code_text = "".join(self.code_buf)
+                if self.code_lang == "$" and code_text.endswith("$"):
+                    # 避免行内公式末尾多一个 $，防止 AI 犯蠢
+                    code_text = code_text[:-1]
                 frag = (
                     "<code lang="
                     + _xml_q(self.code_lang or "text")

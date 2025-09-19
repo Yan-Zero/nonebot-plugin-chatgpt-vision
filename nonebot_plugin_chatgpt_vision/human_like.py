@@ -21,7 +21,7 @@ from nonebot.rule import to_me
 from nonebot.permission import SUPERUSER
 
 from .group import GroupRecord, SpecialOperation
-from .utils import USER_NAME_CACHE, check_url_stutas, convert_tex_to_png_base64
+from .utils import USER_NAME_CACHE, check_url_stutas, convert_tex_to_png
 from .config import p_config
 from .picsql import randpic
 from .record import RecordSeg, RecordList, xml_to_v11msg, v11msg_to_xml_async
@@ -99,9 +99,9 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                 name = "FOUND://"
             elif name.startswith("MATH://"):
                 code = name[7:]
-                png_b64 = await convert_tex_to_png_base64(code)
-                if png_b64:
-                    seg.data["file"] = png_b64
+                png = await convert_tex_to_png(code)
+                if png:
+                    seg.data = V11Seg.image(file=png).data
                 else:
                     seg.type = "text"
                     seg.data = {"text": f"${code}$"}

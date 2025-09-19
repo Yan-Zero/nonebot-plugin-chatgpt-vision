@@ -1,7 +1,5 @@
 import yaml
 import bisect
-import cairosvg
-
 
 from lxml import etree  # type: ignore
 from collections.abc import Iterable
@@ -326,6 +324,13 @@ lang 为 $ 的时候，会渲染其中的数学公式，效果类似与 Markdown
     3p   &\\equiv 1  \\pmod{5} \\\\
 \\end{align*}
 ]]></code></p>
+
+通常意义下，这才是推荐的实践，如果你的回复是带了长段公式，即如果不必要请避免在 <code lang="$$">...</code> 中放入过多的文本(特指 \\text{...} 之类的内容)，而是尽量使用数学公式来表达。
+```
+<p>首先我们可以看到图片中分母是<code lang="$">2 n (n + 1) (n + 2)</code><br/>而分子则是<code lang="$">1 \\times 2 + 2 \\times 3 + \\cdots + n (n + 1)</code></p>
+<p>因此分母即为<code lang="$">2 \\sum_{i=1}^{n} i (i + 1) = \\frac{n (n + 1) (n + 2)}{3}</code><br/>所以原式化简后即为<code lang="$">6</code>。</p>
+```
+特别是我们更推荐使用 <code lang="$">...</code> 而不是 <code lang="$$">...</code>。即使两者都可以表示行内公式。
 
 我们一般推荐多分段，因为单段如果太长容易造成他人阅读困难等。记得你的回复需要正确转义 XML 相关的符号，特别是 & < > " ' 等符号。
 
