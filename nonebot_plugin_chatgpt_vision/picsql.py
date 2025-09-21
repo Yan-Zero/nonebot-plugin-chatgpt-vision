@@ -53,26 +53,6 @@ else:
             return None, ""
 
 
-async def resnet_50(url: str) -> str:
-    """图片分类"""
-    if not p_config.image_classification_url:
-        return "notfound"
-    if not p_config.image_classification_id:
-        return "notfound"
-    async with aiohttp.ClientSession() as session:
-        rsp = await session.post(
-            p_config.image_classification_url,
-            json={"account_id": p_config.image_classification_id, "image_url": url},
-        )
-        if rsp.status != 200:
-            return "notfound"
-        try:
-            data = await rsp.text()
-            return json.loads(data)["description"].strip().replace('"', "")
-        except Exception:
-            return "notfound"
-
-
 async def upload_image(url: str) -> str:
     """上传图片"""
     if not p_config.image_cdn_key:

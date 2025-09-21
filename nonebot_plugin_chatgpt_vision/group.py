@@ -41,7 +41,7 @@ class GroupRecord:
     max_rest: int = 60
     min_rest: int = 40
     cd: timedelta = timedelta(seconds=5)
-    max_logs: int = 40
+    max_logs: int = p_config.chat_max_log
 
     image_mode: int = 0
     todo_ops: list[tuple[SpecialOperation, Any]]

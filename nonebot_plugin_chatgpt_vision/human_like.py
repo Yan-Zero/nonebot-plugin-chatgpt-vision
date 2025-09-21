@@ -65,7 +65,7 @@ for files in pathlib.Path("./configs/chatgpt-vision/configs").glob("*.yaml"):
 
 
 GROUP_RECORD: dict = {}
-for v in p_config.human_like_group:
+for v in p_config.chat_group:
     if str(v) not in GROUP_RECORD:
         GROUP_RECORD[str(v)] = GroupRecord(**_CONFIG.get(str(v), {}))
 try:
@@ -84,13 +84,13 @@ except Exception as ex:
 
 
 async def human_like_group(bot: Bot, event: Event) -> bool:
-    if not p_config.human_like_chat or not isinstance(event, V11G):
+    if not p_config.chat_mode or not isinstance(event, V11G):
         return False
     try:
         group_id = str(event.group_id)
     except Exception:
         return False
-    return group_id in p_config.human_like_group
+    return group_id in p_config.chat_group
 
 
 humanlike = on_message(rule=Rule(human_like_group), priority=1, block=False)
@@ -295,7 +295,7 @@ async def _(bot: V11Bot, event: V11G, state):
 
 
 async def human_like_on_notice(bot: Bot, event: Event):
-    if not p_config.human_like_chat or not isinstance(event, NoticeEvent):
+    if not p_config.chat_mode or not isinstance(event, NoticeEvent):
         return False
     if not event.notice_type.startswith("group_"):
         return False
