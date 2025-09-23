@@ -20,8 +20,8 @@ from .utils import fix_xml, GLOBAL_PROMPT, download_image_to_base64, FORBIDDEN_T
 from .config import p_config
 from .record import RecordSeg, RecordList, XML_PROMPT
 from .tools.code import MmaTool, PyTool
-from .tools.block import BlockTool, ListBlockedTool
-from .tools.group import BanUser
+from .tools.block import BlockTool, ListBlockedTool, BanUser
+from .tools.internet import FetchUrlTool, SearchTool
 
 
 class SpecialOperation(Enum):
@@ -53,6 +53,9 @@ class GroupRecord:
     lock: asyncio.Lock
     mcp_loaded: bool = False
     tool_manager: ToolManager
+
+    first_msg: Optional[RecordSeg] = None
+    """第一条消息，也就是不会被删除的消息"""
 
     def __init__(
         self,
@@ -99,6 +102,7 @@ class GroupRecord:
                 "run_python",
                 "block_user",
                 "list_blocked_users",
+                "fetch",
             ]
         self.mcp_config = mcp_config
         self.set(**kwargs)
@@ -115,6 +119,8 @@ class GroupRecord:
             MmaTool(),
             PyTool(),
             BanUser(self),
+            FetchUrlTool(),
+            SearchTool(),
         ]
         for tool in tools:
             if tool.get_name() in FORBIDDEN_TOOLS:
@@ -191,6 +197,7 @@ class GroupRecord:
         max_logs: Optional[int] = None,
         image_mode: Optional[int] = None,
         base64: Optional[bool] = None,
+        first_msg: Optional[dict] = None,
         **kwargs,
     ):
         if bot_name is not None:
@@ -213,6 +220,15 @@ class GroupRecord:
             self.image_mode = image_mode
         if base64 is not None:
             self.base64 = base64
+        if first_msg is not None:
+            if isinstance(first_msg, dict):
+                if "time" not in first_msg:
+                    first_msg["time"] = datetime.now()
+                self.first_msg = RecordSeg(**first_msg)
+            elif isinstance(first_msg, RecordSeg):
+                self.first_msg = first_msg
+            else:
+                raise ValueError("first_msg must be a dict or RecordSeg")
 
     async def append(
         self,
@@ -271,7 +287,6 @@ class GroupRecord:
         return ret
 
     def recall(self, msg_id: int):
-        # raise NotImplementedError
         self.msgs.recall(msg_id)
 
     def check(self, id: str, time: datetime):
@@ -283,9 +298,18 @@ class GroupRecord:
         return False
 
     def merge(self) -> list[dict]:
-        return [{"role": "system", "content": self.system()}] + self.msgs.message(
-            self.bot_id, self.image_mode == 1
-        )
+        prefix: list[dict[str, Any]] = [{"role": "system", "content": self.system()}]
+        if self.first_msg:
+            prefix.append(
+                {
+                    "role": (
+                        "assistant" if self.first_msg.uid == self.bot_id else "user"
+                    ),
+                    "content": self.first_msg.content(with_title=True),
+                }
+            )
+
+        return prefix + self.msgs.message(self.bot_id, self.image_mode == 1)
 
     def remake(self):
         self.msgs = RecordList()
@@ -322,7 +346,7 @@ class GroupRecord:
                     message=messages,
                     model=self.model,
                     temperature=0.8,
-                    max_tokens=4096,
+                    max_tokens=4096 * 2,
                     tools=tools if tools else None,
                     tool_choice="auto" if tools else None,
                 )

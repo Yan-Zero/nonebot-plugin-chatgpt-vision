@@ -18,9 +18,11 @@ dependencies = [
     "lxml<7.0.0,>=6.0.1",
     "cairosvg<3.0.0,>=2.8.2",
     "aiohttp>=3.12.15",
+    "markdownify>=1.2.0",
+    "readabilipy>=0.3.0",
 ]
 name = "nonebot-plugin-chatgpt-vision"
-version = "1.1.8"
+version = "1.1.9"
 description = ""
 readme = "README.md"
 
