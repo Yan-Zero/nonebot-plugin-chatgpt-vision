@@ -88,7 +88,11 @@ class ToolManager:
         if name not in self.tools:
             logger.warning(f"Tool {name} not found")
             return f"工具 {name} 不存在"
-        return await self.tools[name].execute(**kwargs)
+        try:
+            return await self.tools[name].execute(**kwargs)
+        except Exception as ex:
+            logger.exception(f"Error executing tool {name}: {ex}")
+            return f"执行工具 {name} 时出错: {ex}"
 
 
 class MCPUnifiedClient:

@@ -4,27 +4,12 @@
 [![pypi](https://img.shields.io/pypi/v/nonebot-plugin-chatgpt-vision.svg)](https://pypi.python.org/pypi/nonebot-plugin-chatgpt-vision)
 ![python](https://img.shields.io/badge/python-3.11+-blue.svg)
 
-简要介绍：
-
-- 群聊“拟人”模式（Human Like），支持图片引用、屏蔽、工具调用（可选 MCP）。
 
 ## 安装
 
 使用 pip：
 
-    pip install nonebot-plugin-chatgpt-vision
-
-使用 pdm：
-
-    pdm add nonebot-plugin-chatgpt-vision
-
-使用 poetry：
-
-    poetry add nonebot-plugin-chatgpt-vision
-
-使用 conda：
-
-    conda install nonebot-plugin-chatgpt-vision
+    uv install git+https://github.com/Yan-Zero/nonebot-plugin-chatgpt-vision.git
 
 在 nonebot2 项目 `pyproject.toml` 的 `[tool.nonebot]` 中追加：
 
@@ -46,12 +31,8 @@
 | human_like_max_log | int | 60 | Human Like 保存的聊天记录条数 |
 | openai_default_model | str | gpt-4o | 默认对话模型 |
 | fallback_model | str | gemini-2.5-flash | 回退模型（默认模型不可用或超限时） |
-| limit_for_single_user | float | 0.05 | 单用户每日额度（美元） |
 | max_chatlog_count | int | 15 | 普通对话历史消息条数上限 |
 | max_history_tokens | int | 3000 | 历史消息 Token 上限（仅 user） |
-| chat_with_image | bool | False | 普通对话是否携带图片内容 |
-| sd_url | str | - | SD 文生图/图生图服务地址（OpenAI 兼容网关） |
-| sd_key | str | - | SD 服务密钥 |
 | mcp_enabled | bool | False | 是否启用 MCP 工具装载（启用后按 mcp_config_file 加载） |
 | mcp_config_file | str | configs/chatgpt-vision/mcp.yaml | MCP 配置文件路径（唯一入口） |
 
@@ -114,15 +95,7 @@ http:
 
 | 指令 | 权限 | 需要 @ | 范围 | 说明 |
 |:----:|:----:|:------:|:----:|:----:|
-| /chat | 群员 | 否 | 群/私聊 | 普通对话（含上下文与额度控制） |
-| /reset | 群员 | 否 | 群/私聊 | 清空个人上下文 |
-| /model [name] | 群员 | 否 | 群/私聊 | 设置个人使用模型（不校验有效性） |
-| （回复消息）read | 群员 | 是 | 群 | 朗读被回复消息（TTS），私聊仅超管可用 |
 | remake | 管理/超管 | 是 | 群 | 重置 Human Like 群内上下文 |
-| 额度 | 群员 | 是 | 群 | 查询 Human Like 群剩余额度 |
-| 画 / draw | 群员 | 是 | 群 | DALL·E 3 画图（需先“开关绘图”开启） |
-| sd | 群员 | 是 | 群 | SD 绘图（配置 sd_url/sd_key 后可用） |
-| 开关绘图 / 开启绘图 / 关闭绘图 | 管理/超管 | 是 | 群 | 切换绘图开关 |
 
 说明：“需要 @”表示群聊内需要对 bot 说话（to_me）。
 
