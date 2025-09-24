@@ -152,7 +152,10 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
         if not s.strip():
             continue
         for p in xml_to_v11msg(s):
-            await matcher.send(await convert_image(p))
+            try:
+                await matcher.send(await convert_image(p))
+            except Exception as e:
+                logger.error(f"Error sending message: {e}")
     if not group.todo_ops:
         return
     async with group.lock:

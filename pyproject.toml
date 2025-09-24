@@ -19,9 +19,10 @@ dependencies = [
     "cairosvg<3.0.0,>=2.8.2",
     "aiohttp>=3.12.15",
     "trafilatura>=1.6.1",
+    "httpx>=0.28.1",
 ]
 name = "nonebot-plugin-chatgpt-vision"
-version = "1.2.1"
+version = "1.2.2"
 description = ""
 readme = "README.md"
 

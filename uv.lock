@@ -1247,7 +1247,7 @@ wheels = [
 
 [[package]]
 name = "nonebot-plugin-chatgpt-vision"
-version = "1.2.0"
+version = "1.2.1"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -1255,6 +1255,7 @@ dependencies = [
     { name = "beautifulsoup4" },
     { name = "cairosvg" },
     { name = "fastmcp" },
+    { name = "httpx" },
     { name = "lxml" },
     { name = "nonebot-adapter-onebot" },
     { name = "nonebot2" },
@@ -1272,6 +1273,7 @@ requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.13.5,<5.0.0" },
     { name = "cairosvg", specifier = ">=2.8.2,<3.0.0" },
     { name = "fastmcp", specifier = ">=2.12.3,<3.0.0" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "lxml", specifier = ">=6.0.1,<7.0.0" },
     { name = "nonebot-adapter-onebot", specifier = ">=2.4.3,<3.0.0" },
     { name = "nonebot2", specifier = ">=2.4.0,<3.0.0" },

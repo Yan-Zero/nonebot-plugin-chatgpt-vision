@@ -39,7 +39,7 @@ async def fetch_url(
         if extracted:
             return (
                 extracted,
-                f"Powered by html2text.html2txt to extract text from {url}\n\n",
+                f"Powered by trafilatura.html2txt to extract text from {url}\n\n",
             )
     # Fallback to raw content
     return downloaded, f"Fetched raw content from {url}\n\n"

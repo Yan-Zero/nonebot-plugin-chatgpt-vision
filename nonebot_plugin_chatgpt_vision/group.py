@@ -400,7 +400,17 @@ class GroupRecord:
                             )
                         except Exception as ex:
                             result = f"工具调用失败：{ex}"
-                        yield f"<p><code lang=\"markdown\"><![CDATA[# {function_name.replace(']]>', ']]]]><![CDATA[>')} 调用结果\n```\n{result.replace(']]>', ']]]]><![CDATA[>')}\n```]]></code></p>"
+                        yield (
+                            f"<p><code lang=\"markdown\"><![CDATA[# {function_name.replace(']]>', ']]]]><![CDATA[>')}\n"
+                            "## 调用参数\n"
+                            "```\n"
+                            f"{yaml.safe_dump(function_args, allow_unicode=True).replace(']]>', ']]]]><![CDATA[>')}\n"
+                            "```\n"
+                            "## 调用结果\n"
+                            "```\n"
+                            f"{result.replace(']]>', ']]]]><![CDATA[>')}"
+                            "\n```]]></code></p>"
+                        )
                         await self.append(
                             RecordSeg(
                                 function_name,
