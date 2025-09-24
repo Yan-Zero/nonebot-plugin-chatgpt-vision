@@ -2,6 +2,7 @@ import os
 import re
 import yaml
 import random
+import aiohttp
 import pathlib
 
 from nonebot import on_command, on_notice, on_message, logger
@@ -111,9 +112,9 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                     )
                 ):
                     seg.data["file"] = correct_tencent_image_url(name)
-                    continue
-                if await check_url_status(name):
-                    continue
+                async with aiohttp.ClientSession() as client:
+                    if await check_url_status(name, client):
+                        continue
                 seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"
                 continue
             elif name.startswith("MATH://"):

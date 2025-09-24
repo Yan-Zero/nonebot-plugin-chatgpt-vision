@@ -113,15 +113,14 @@ async def convert_gif_to_png_base64(url: str) -> str:
     return url
 
 
-async def check_url_status(url: str) -> bool:
+async def check_url_status(url: str, session: aiohttp.ClientSession) -> str | None:
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    return False
-                return True
+        async with session.get(url, timeout=aiohttp.ClientTimeout(5)) as response:
+            if response.status == 200:
+                return url
+            logger.warning(f"Image URL {url} returned status {response.status}")
     except Exception:
-        return False
+        pass
 
 
 async def download_image_to_base64(url: str) -> str:

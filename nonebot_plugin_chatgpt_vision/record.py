@@ -12,7 +12,12 @@ from collections.abc import Iterable
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 
-from .utils import QFACE, convert_gif_to_png_base64, correct_tencent_image_url
+from .utils import (
+    QFACE,
+    check_url_status,
+    convert_gif_to_png_base64,
+    correct_tencent_image_url,
+)
 
 
 async def v11msg_to_xml_async(
@@ -357,19 +362,17 @@ class RecordList:
         """
 
         async def _(r: RecordSeg, client: aiohttp.ClientSession):
-            async def check(url: str) -> str | None:
-                try:
-                    url = correct_tencent_image_url(url)
-                    async with client.head(
-                        url, timeout=aiohttp.ClientTimeout(5)
-                    ) as resp:
-                        if resp.status == 200:
-                            return url
-                        logger.warning(f"Image URL {url} returned status {resp.status}")
-                except Exception:
-                    pass
-
-            r.images = list(filter(None, await asyncio.gather(*map(check, r.images))))
+            r.images = list(
+                filter(
+                    None,
+                    await asyncio.gather(
+                        *map(
+                            partial(check_url_status, session=client),
+                            map(correct_tencent_image_url, r.images),
+                        )
+                    ),
+                )
+            )
 
         async with aiohttp.ClientSession() as client:
             await asyncio.gather(*map(partial(_, client=client), self.records))
