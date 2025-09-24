@@ -51,27 +51,3 @@ else:
                 return None, ""
         except Exception:
             return None, ""
-
-
-# async def upload_image(url: str) -> str:
-#     """上传图片"""
-#     if not p_config.image_cdn_key:
-#         return url
-#     if not p_config.image_cdn_url:
-#         return url
-#     if not p_config.image_cdn_put_url:
-#         return url
-#     async with aiohttp.ClientSession(
-#         headers={
-#             "Authorization": f"Bearer {p_config.image_cdn_key}",
-#             "Content-Type": "application/json",
-#         }
-#     ) as session:
-#         rsp = await session.post(
-#             p_config.image_cdn_put_url,
-#             json={"image_url": url},
-#         )
-#         try:
-#             return urljoin(p_config.image_cdn_url, (await rsp.json())["hash"])
-#         except Exception:
-#             return url

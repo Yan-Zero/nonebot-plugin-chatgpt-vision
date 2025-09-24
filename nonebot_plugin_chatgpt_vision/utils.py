@@ -12,7 +12,7 @@ from lxml import etree  # type: ignore
 from typing import List
 from nonebot import logger
 from datetime import datetime
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse, parse_qs, urlencode, urlunparse
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
 
 QFACE = {}
@@ -29,6 +29,30 @@ RKEY: dict[str, tuple[datetime, str]] = {
     "group": (datetime.min, ""),
     "private": (datetime.min, ""),
 }
+
+
+def correct_tencent_image_url(url: str) -> str:
+    """
+    修正腾讯图片 URL
+
+    Parameters:
+    -----------
+    url: str
+        图片 URL
+
+    Returns:
+    --------
+    str
+        修正后的图片 URL
+    """
+    if not url.startswith(
+        ("https://multimedia.nt.qq.com.cn", "http://multimedia.nt.qq.com.cn")
+    ):
+        return url
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    params["rkey"] = [RKEY.get("group", (None, ""))[1]]
+    return urlunparse(parsed._replace(query=urlencode(params, doseq=True)))
 
 
 async def convert_gif_to_png_base64(url: str) -> str:

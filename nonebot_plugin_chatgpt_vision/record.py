@@ -8,14 +8,11 @@ from typing import Any, Optional
 from nonebot import logger
 from datetime import datetime
 from functools import partial
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-from collections.abc import Iterable, AsyncIterator
+from collections.abc import Iterable
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 
-from .utils import QFACE, RKEY, convert_gif_to_png_base64
-
-# from .picsql import upload_image
+from .utils import QFACE, convert_gif_to_png_base64, correct_tencent_image_url
 
 
 async def v11msg_to_xml_async(
@@ -83,7 +80,7 @@ async def v11msg_to_xml_async(
             file_ = data.get("file")
             image = etree.SubElement(p, "image")
             if file_:
-                url = await convert_gif_to_png_base64(file_)
+                url = await convert_gif_to_png_base64(correct_tencent_image_url(file_))
                 image.set("url", file_)
                 images.append(url)
 
@@ -362,19 +359,7 @@ class RecordList:
         async def _(r: RecordSeg, client: aiohttp.ClientSession):
             async def check(url: str) -> str | None:
                 try:
-                    if url.startswith(
-                        (
-                            "https://multimedia.nt.qq.com.cn",
-                            "http://multimedia.nt.qq.com.cn",
-                        )
-                    ):
-                        parsed = urlparse(url)
-                        params = parse_qs(parsed.query)
-                        params["rkey"] = [RKEY.get("group", (None, ""))[1]]
-                        url = urlunparse(
-                            parsed._replace(query=urlencode(params, doseq=True))
-                        )
-                        return url
+                    url = correct_tencent_image_url(url)
                     async with client.head(
                         url, timeout=aiohttp.ClientTimeout(5)
                     ) as resp:

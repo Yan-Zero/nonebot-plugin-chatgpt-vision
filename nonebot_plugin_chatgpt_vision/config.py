@@ -3,8 +3,6 @@ from pydantic import BaseModel
 
 
 class Config(BaseModel):
-    """Plugin Config Here"""
-
     # 默认与回退模型
     openai_default_model: str = "gpt-4o"
     """ 默认模型 """
@@ -18,9 +16,6 @@ class Config(BaseModel):
 
     # 图片与识别
     image_mode: int = 1
-    # image_cdn_url: str = ""
-    # image_cdn_key: str = ""
-    # image_cdn_put_url: str = ""
 
     # MCP（Model Context Protocol）
     mcp_enabled: bool = False

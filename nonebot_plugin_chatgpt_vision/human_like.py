@@ -28,6 +28,7 @@ from .utils import (
     check_url_status,
     convert_tex_to_png,
     convert_markdown_to_png,
+    correct_tencent_image_url,
 )
 from .config import p_config
 from .picsql import randpic
@@ -111,13 +112,7 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                         "http://multimedia.nt.qq.com.cn",
                     )
                 ):
-                    # 拼接上 rkey 参数
-                    parsed = urlparse(str(name))
-                    params = parse_qs(parsed.query)
-                    params["rkey"] = [RKEY.get("group", (None, ""))[1]]
-                    seg.data["file"] = urlunparse(
-                        parsed._replace(query=urlencode(params, doseq=True))
-                    )
+                    seg.data["file"] = correct_tencent_image_url(name)
                     continue
                 if await check_url_status(name):
                     continue
