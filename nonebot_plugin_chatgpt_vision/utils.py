@@ -1,6 +1,7 @@
 import io
 import re
 import json
+import httpx
 import base64
 import aiohttp
 import pathlib
@@ -77,7 +78,7 @@ async def convert_gif_to_png_base64(url: str) -> str:
     return url
 
 
-async def check_url_stutas(url: str) -> bool:
+async def check_url_status(url: str) -> bool:
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
@@ -239,6 +240,13 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 url = attrs.get("url")
                 name_attr = attrs.get("name")
                 if url and str(url).startswith("http"):
+                    resp = httpx.head(url, timeout=5)
+                    if resp.status_code != 200:
+                        return '<image name="Not Found"/>'
+                    # 判断是否为图片，否则发纯 url
+                    content_type = resp.headers.get("Content-Type", "")
+                    if not content_type.startswith("image/"):
+                        return f" {_xml_q(url)} "
                     return f"<image url={_xml_q(url)}/>"
                 if name_attr:
                     return f"<image name={_xml_q(name_attr)}/>"

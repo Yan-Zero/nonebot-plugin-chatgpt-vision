@@ -7,13 +7,19 @@
 
 ## 安装
 
-使用 pip：
+使用 uv：
 
-    uv install git+https://github.com/Yan-Zero/nonebot-plugin-chatgpt-vision.git
+    uv add git+https://github.com/Yan-Zero/nonebot-plugin-chatgpt-vision.git
 
 在 nonebot2 项目 `pyproject.toml` 的 `[tool.nonebot]` 中追加：
 
     plugins = ["nonebot_plugin_chatgpt_vision"]
+
+### 更新
+
+使用 uv：
+
+    uv add --upgrade nonebot-plugin-chatgpt-vision
 
 ## 配置
 

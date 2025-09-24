@@ -21,7 +21,7 @@ dependencies = [
     "trafilatura>=1.6.1",
 ]
 name = "nonebot-plugin-chatgpt-vision"
-version = "1.2.0"
+version = "1.2.1"
 description = ""
 readme = "README.md"
 

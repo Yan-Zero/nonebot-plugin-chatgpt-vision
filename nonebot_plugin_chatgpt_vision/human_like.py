@@ -22,7 +22,7 @@ from nonebot.permission import SUPERUSER
 
 from .group import GroupRecord, SpecialOperation
 from .utils import (
-    check_url_stutas,
+    check_url_status,
     convert_tex_to_png,
     convert_markdown_to_png,
     FORBIDDEN_TOOLS,
@@ -103,7 +103,7 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                 continue
             name = seg.data.get("file", "")
             if name.startswith("http"):
-                if await check_url_stutas(name):
+                if await check_url_status(name):
                     continue
                 name = "FOUND://"
             elif name.startswith("MATH://"):

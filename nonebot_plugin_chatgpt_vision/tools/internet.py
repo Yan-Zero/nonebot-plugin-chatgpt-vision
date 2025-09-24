@@ -8,6 +8,43 @@ from . import Tool
 from ..chat import chat
 
 
+async def fetch_url(
+    url: str, user_agent: str, force_raw: bool = False
+) -> Tuple[str, str]:
+    async with AsyncClient() as client:
+        rsp = await client.get(url, headers={"User-Agent": user_agent}, timeout=15)
+        rsp.raise_for_status()
+        content_type = rsp.headers.get("Content-Type", "")
+        downloaded = rsp.text
+    is_page_html = (
+        "<html" in downloaded[:100] or "text/html" in content_type or not content_type
+    )
+    if is_page_html and not force_raw:
+        # 优先使用 trafilatura 提取
+        extracted = trafilatura.extract(
+            downloaded,
+            output_format="markdown",
+            with_metadata=True,
+            include_formatting=True,
+            include_images=True,
+            include_links=True,
+            url=url,
+        )
+        if extracted:
+            return (
+                extracted.strip(),
+                f"Powered by trafilatura.extract to extract markdown from {url}\n\n",
+            )
+        extracted = trafilatura.html2txt(downloaded).strip()
+        if extracted:
+            return (
+                extracted,
+                f"Powered by html2text.html2txt to extract text from {url}\n\n",
+            )
+    # Fallback to raw content
+    return downloaded, f"Fetched raw content from {url}\n\n"
+
+
 class FetchUrlTool(Tool):
     def __init__(
         self,
@@ -52,49 +89,6 @@ class FetchUrlTool(Tool):
     async def execute(
         self, url: str, start_index: int = 0, max_length: int = 5000, raw: bool = False
     ) -> str:
-        async def fetch_url(
-            url: str, user_agent: str, force_raw: bool = False
-        ) -> Tuple[str, str]:
-            """
-            Fetch the URL and return the content in a form ready for the LLM, as well as a prefix string with status information.
-            """
-            async with AsyncClient() as client:
-                rsp = await client.get(
-                    url, headers={"User-Agent": user_agent}, timeout=15
-                )
-                rsp.raise_for_status()
-                content_type = rsp.headers.get("Content-Type", "")
-                downloaded = rsp.text
-            is_page_html = (
-                "<html" in downloaded[:100]
-                or "text/html" in content_type
-                or not content_type
-            )
-            if is_page_html and not force_raw:
-                # 优先使用 trafilatura 提取
-                extracted = trafilatura.extract(
-                    downloaded,
-                    output_format="markdown",
-                    with_metadata=True,
-                    include_formatting=True,
-                    include_images=True,
-                    include_links=True,
-                    url=url,
-                )
-                if extracted:
-                    return (
-                        extracted,
-                        f"Powered by trafilatura to extract text from {url}.\n\n",
-                    )
-                extracted = trafilatura.html2txt(downloaded)
-                if extracted.strip():
-                    return (
-                        extracted,
-                        f"Powered by html2text to extract text from {url}.\n\n",
-                    )
-            # Fallback to raw content
-            return downloaded, f"Fetched raw content from {url}.\n\n"
-
         try:
             content, prefix = await fetch_url(url, self.user_agent, force_raw=raw)
             content = content[start_index : start_index + max_length]
@@ -104,11 +98,6 @@ class FetchUrlTool(Tool):
 
 
 class SearchTool(Tool):
-    """由 Gemini 驱动的搜索工具"""
-
-    def __init__(self):
-        self.fetch = FetchUrlTool()
-
     def get_schema(self) -> dict[str, Any]:
         return {
             "type": "function",
@@ -210,15 +199,31 @@ results:
                         resp = await client.head(
                             item["link"],
                             follow_redirects=True,
-                            headers={"User-Agent": "Mozilla/5.0"},
+                            headers={
+                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+                            },
                             timeout=10,
                         )
                         item["link"] = str(resp.url)
                     if include_content:
-                        content = await self.fetch.execute(
-                            item["link"], max_length=3000
-                        )
-                        item["content"] = content
+                        try:
+                            content, _ = await fetch_url(
+                                item["link"],
+                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+                            )
+                            if len(content) > 2000:
+                                content = (
+                                    content[:2000]
+                                    + "\n\n[内容过长已截断，请使用 fetch 工具获取完整内容]"
+                                )
+                                item["content"] = content
+                            else:
+                                item["content"] = content
+                                del item["snippet"]
+                        except Exception as e:
+                            item["content"] = (
+                                f"Error fetching content, you can tell user to browse it by themselves. Error: {e}"
+                            )
             return yaml.safe_dump(parsed, allow_unicode=True)
         except Exception as e:
             return f"搜索时出错：{e}"

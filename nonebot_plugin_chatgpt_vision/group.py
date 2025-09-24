@@ -356,7 +356,8 @@ class GroupRecord:
                 record_msg: list[tuple[str, str]] = []
                 should_record = False
                 if getattr(choice.message, "content", None):
-                    content = fix_xml(
+                    content = await asyncio.to_thread(
+                        fix_xml,
                         choice.message.content.replace("[NULL]", ""),
                         convert_face_to_image=True,
                     )
@@ -387,6 +388,9 @@ class GroupRecord:
                     await self.append(record)
 
                 if getattr(choice.message, "tool_calls", None):
+                    # 携带工具结果继续获取最终回复
+                    if not content:
+                        yield "<p>[使用工具中...]</p>"
                     for tool_call in choice.message.tool_calls:
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)
@@ -396,6 +400,7 @@ class GroupRecord:
                             )
                         except Exception as ex:
                             result = f"工具调用失败：{ex}"
+                        yield f"<p><code lang=\"markdown\"><![CDATA[# {function_name.replace(']]>', ']]]]><![CDATA[>')} 调用结果\n```\n{result.replace(']]>', ']]]]><![CDATA[>')}\n```]]></code></p>"
                         await self.append(
                             RecordSeg(
                                 function_name,
@@ -406,9 +411,6 @@ class GroupRecord:
                             )
                         )
 
-                    # 携带工具结果继续获取最终回复
-                    if not content:
-                        yield "<p>[使用工具中...]</p>"
                     async for i in recursive(self, recursion_depth - 1):
                         yield i
             except Exception as ex:
