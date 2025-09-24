@@ -11,6 +11,7 @@ from PIL import Image
 from lxml import etree  # type: ignore
 from typing import List
 from nonebot import logger
+from datetime import datetime
 from urllib.parse import quote_plus
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
 
@@ -23,6 +24,11 @@ except Exception:
 
 GLOBAL_PROMPT = ""
 FORBIDDEN_TOOLS: set[str] = set()
+
+RKEY: dict[str, tuple[datetime, str]] = {
+    "group": (datetime.min, ""),
+    "private": (datetime.min, ""),
+}
 
 
 async def convert_gif_to_png_base64(url: str) -> str:
@@ -238,7 +244,16 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 return f"<reply id={_xml_q(mid)}/>"
             if name == "image":
                 url = attrs.get("url")
+                if url:
+                    url = url.strip().replace("&amp;", "&").replace("#38;", "")
                 name_attr = attrs.get("name")
+                if str(url).startswith(
+                    (
+                        "https://multimedia.nt.qq.com.cn",
+                        "http://multimedia.nt.qq.com.cn",
+                    )
+                ):
+                    return f"<image url={_xml_q(str(url))}/>"
                 if url and str(url).startswith("http"):
                     resp = httpx.head(url, timeout=5)
                     if resp.status_code != 200:
@@ -246,7 +261,7 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                     # 判断是否为图片，否则发纯 url
                     content_type = resp.headers.get("Content-Type", "")
                     if not content_type.startswith("image/"):
-                        return f" {_xml_q(url)} "
+                        return f" {_escape_text(url)} "
                     return f"<image url={_xml_q(url)}/>"
                 if name_attr:
                     return f"<image name={_xml_q(name_attr)}/>"
@@ -267,7 +282,7 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
 
                 # 如果 id 和 name 不匹配
                 if convert_face_to_image:
-                    return f"<image name={_xml_q(face_name)}/>"
+                    return f"<image name={_xml_q(face_name )}/>"
 
                 # 如果 name 不为空，则反查 id
                 if face_name:

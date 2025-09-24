@@ -1,16 +1,21 @@
 import yaml
 import bisect
+import aiohttp
+import asyncio
 
 from lxml import etree  # type: ignore
 from typing import Any, Optional
 from nonebot import logger
 from datetime import datetime
-from collections.abc import Iterable
+from functools import partial
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from collections.abc import Iterable, AsyncIterator
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 
-from .utils import QFACE, convert_gif_to_png_base64
-from .picsql import upload_image
+from .utils import QFACE, RKEY, convert_gif_to_png_base64
+
+# from .picsql import upload_image
 
 
 async def v11msg_to_xml_async(
@@ -79,17 +84,15 @@ async def v11msg_to_xml_async(
             image = etree.SubElement(p, "image")
             if file_:
                 url = await convert_gif_to_png_base64(file_)
-                file_ = await upload_image(url)
                 image.set("url", file_)
-                images.append(file_)
+                images.append(url)
 
         elif st == "mface":
             image = etree.SubElement(p, "image")
             file_ = data.get("url")
             if file_:
                 image.set("url", file_)
-                url = await convert_gif_to_png_base64(file_)
-                images.append(await upload_image(url))
+                images.append(await convert_gif_to_png_base64(file_))
 
             summary = data.get("summary", "")
             if (
@@ -306,8 +309,85 @@ class RecordList:
     def __getitem__(self, index: int) -> RecordSeg:
         return self.records[index]
 
-    def pop(self, index: int) -> RecordSeg:
-        return self.records.pop(index)
+    def pop(self, index: int, ensure_correct: bool = True) -> Iterable[RecordSeg]:
+        """
+        移除指定位置的消息，并确保上下文是符合相对应的要求。（例如TOOL CALL必须在用户消息之后之类的）
+
+        Parameters:
+        -----------
+        index: int
+            要移除的消息索引
+
+        ensure_correct: bool
+            是否确保上下文正确。如果为True，则会处理直至上下文正确为止。
+
+        Returns:
+        --------
+        Iterable[RecordSeg]
+            被移除的消息列表
+        """
+        if not ensure_correct:
+            return [self.records.pop(index)]
+        if index >= len(self.records):
+            raise IndexError("RecordList index out of range")
+
+        index %= len(self.records)
+        if self.records[index].uid == "tool":
+            # TOOL 不需要管太多
+            return [self.records.pop(index)]
+        if index == len(self.records) - 1:
+            # 最后一条消息，直接删除
+            return [self.records.pop(index)]
+
+        yield self.records.pop(index)
+        if index == 0:
+            is_tool_call = False
+            for id, _ in self.records[0].msg:
+                if id == "tool_calls":
+                    is_tool_call = True
+                    break
+            if is_tool_call:
+                yield from self.pop(0, ensure_correct=True)
+            return
+
+        while index < len(self.records):
+            if self.records[index].uid == "tool":
+                yield self.records.pop(index)
+
+    async def remove_bad_images(self):
+        """
+        移除所有无法访问的图片，并且给rkey参数添加最新的值
+        """
+
+        async def _(r: RecordSeg, client: aiohttp.ClientSession):
+            async def check(url: str) -> str | None:
+                try:
+                    if url.startswith(
+                        (
+                            "https://multimedia.nt.qq.com.cn",
+                            "http://multimedia.nt.qq.com.cn",
+                        )
+                    ):
+                        parsed = urlparse(url)
+                        params = parse_qs(parsed.query)
+                        params["rkey"] = [RKEY.get("group", (None, ""))[1]]
+                        url = urlunparse(
+                            parsed._replace(query=urlencode(params, doseq=True))
+                        )
+                        return url
+                    async with client.head(
+                        url, timeout=aiohttp.ClientTimeout(5)
+                    ) as resp:
+                        if resp.status == 200:
+                            return url
+                        logger.warning(f"Image URL {url} returned status {resp.status}")
+                except Exception:
+                    pass
+
+            r.images = list(filter(None, await asyncio.gather(*map(check, r.images))))
+
+        async with aiohttp.ClientSession() as client:
+            await asyncio.gather(*map(partial(_, client=client), self.records))
 
 
 XML_PROMPT = (

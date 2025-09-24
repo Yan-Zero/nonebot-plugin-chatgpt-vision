@@ -4,28 +4,30 @@ import yaml
 import random
 import pathlib
 
-from datetime import datetime
 from nonebot import on_command, on_notice, on_message, logger
+from datetime import datetime, timedelta
+from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from nonebot.rule import Rule
+from nonebot.rule import to_me
 from nonebot.params import CommandArg
 from nonebot.matcher import Matcher
+from nonebot.adapters import Bot
 from nonebot.adapters import Event
-from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
+from nonebot.permission import SUPERUSER
 from nonebot.adapters.onebot.v11.bot import Bot as V11Bot
+from nonebot.adapters.onebot.v11.event import GroupMessageEvent as V11G
 from nonebot.adapters.onebot.v11.event import NoticeEvent
 from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN
-from nonebot.adapters import Bot
-from nonebot.rule import Rule
-from nonebot.rule import to_me
-from nonebot.permission import SUPERUSER
 
 from .group import GroupRecord, SpecialOperation
 from .utils import (
+    RKEY,
+    FORBIDDEN_TOOLS,
     check_url_status,
     convert_tex_to_png,
     convert_markdown_to_png,
-    FORBIDDEN_TOOLS,
 )
 from .config import p_config
 from .picsql import randpic
@@ -103,9 +105,24 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                 continue
             name = seg.data.get("file", "")
             if name.startswith("http"):
+                if name.startswith(
+                    (
+                        "https://multimedia.nt.qq.com.cn",
+                        "http://multimedia.nt.qq.com.cn",
+                    )
+                ):
+                    # 拼接上 rkey 参数
+                    parsed = urlparse(str(name))
+                    params = parse_qs(parsed.query)
+                    params["rkey"] = [RKEY.get("group", (None, ""))[1]]
+                    seg.data["file"] = urlunparse(
+                        parsed._replace(query=urlencode(params, doseq=True))
+                    )
+                    continue
                 if await check_url_status(name):
                     continue
-                name = "FOUND://"
+                seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"
+                continue
             elif name.startswith("MATH://"):
                 code = name[7:]
                 png = await convert_tex_to_png(code)
@@ -289,6 +306,14 @@ async def _(bot: V11Bot, event: V11G, state):
             return
     group.rest = random.randint(group.min_rest, group.max_rest)
     group.last_time = datetime.now()
+
+    if RKEY.get("group", (datetime.min, ""))[0] < datetime.now():
+        for item in (await bot.call_api("get_rkey")).get("rkeys", []):
+            RKEY[item.get("type")] = (
+                datetime.fromtimestamp(item.get("created_at", 0))
+                + timedelta(seconds=item.get("ttl", 0) - 300),
+                item.get("rkey", "")[6:],
+            )
 
     try:
         await say(group, event, bot, humanlike)

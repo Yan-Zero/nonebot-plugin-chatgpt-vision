@@ -338,7 +338,7 @@ class GroupRecord:
                     )
                     tools = None
 
-                # 组装消息
+                await self.msgs.remove_bad_images()
                 messages = self.merge()
 
                 # 调用带工具的聊天API
@@ -431,6 +431,19 @@ class GroupRecord:
                         yield i
             except Exception as ex:
                 logger.error(ex)
+                with open(
+                    f"./bug-{datetime.now().timestamp()}.yaml", "w", encoding="utf-8"
+                ) as f:
+                    yaml.safe_dump(
+                        {
+                            "messages": self.merge(),
+                            "model": self.model,
+                            "tools": self.tool_manager.get_tools_schema(),
+                            "error": str(ex),
+                        },
+                        f,
+                        allow_unicode=True,
+                    )
                 self.remake()
                 yield fix_xml(f"发生错误：{await error_chat(ex)}上下文莫得了哦。")
                 return
