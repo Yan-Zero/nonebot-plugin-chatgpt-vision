@@ -1,6 +1,5 @@
 import yaml
-import markdownify
-import readabilipy.simple_json
+import trafilatura
 
 from httpx import AsyncClient
 from typing import Tuple, Any
@@ -60,38 +59,41 @@ class FetchUrlTool(Tool):
             Fetch the URL and return the content in a form ready for the LLM, as well as a prefix string with status information.
             """
             async with AsyncClient() as client:
-                response = await client.get(
-                    url,
-                    follow_redirects=True,
-                    headers={"User-Agent": user_agent},
-                    timeout=30,
+                rsp = await client.get(
+                    url, headers={"User-Agent": user_agent}, timeout=15
                 )
-                response.raise_for_status()
-                page_raw = response.text
-
-            content_type = response.headers.get("content-type", "")
+                rsp.raise_for_status()
+                content_type = rsp.headers.get("Content-Type", "")
+                downloaded = rsp.text
             is_page_html = (
-                "<html" in page_raw[:100]
+                "<html" in downloaded[:100]
                 or "text/html" in content_type
                 or not content_type
             )
-
             if is_page_html and not force_raw:
-                ret = readabilipy.simple_json.simple_json_from_html_string(
-                    is_page_html, use_readability=True
+                # 优先使用 trafilatura 提取
+                extracted = trafilatura.extract(
+                    downloaded,
+                    output_format="markdown",
+                    with_metadata=True,
+                    include_formatting=True,
+                    include_images=True,
+                    include_links=True,
+                    url=url,
                 )
-                if not ret["content"]:
-                    return "<error>Page failed to be simplified from HTML</error>", ""
-                content = markdownify.markdownify(
-                    ret["content"],
-                    heading_style=markdownify.ATX,
-                )
-                return content, ""
-
-            return (
-                page_raw,
-                f"Content type {content_type} cannot be simplified to markdown, but here is the raw content:\n",
-            )
+                if extracted:
+                    return (
+                        extracted,
+                        f"Powered by trafilatura to extract text from {url}.\n\n",
+                    )
+                extracted = trafilatura.html2txt(downloaded)
+                if extracted.strip():
+                    return (
+                        extracted,
+                        f"Powered by html2text to extract text from {url}.\n\n",
+                    )
+            # Fallback to raw content
+            return downloaded, f"Fetched raw content from {url}.\n\n"
 
         try:
             content, prefix = await fetch_url(url, self.user_agent, force_raw=raw)
@@ -104,24 +106,32 @@ class FetchUrlTool(Tool):
 class SearchTool(Tool):
     """由 Gemini 驱动的搜索工具"""
 
+    def __init__(self):
+        self.fetch = FetchUrlTool()
+
     def get_schema(self) -> dict[str, Any]:
         return {
             "type": "function",
             "function": {
                 "name": "search",
-                "description": "使用网络搜索引擎搜索信息。",
+                "description": "使用网络搜索引擎搜索信息。通常而言这些 link 都是网页，而不是具体的资源链接。因此你必须使用 fetch 之类的工具来获取网页内容，才会知道具体的信息。",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "搜索查询内容"},
+                        "include_content": {
+                            "type": "boolean",
+                            "description": "是否在搜索结果中包含网页内容的全文。默认为 True。",
+                            "default": True,
+                        },
                         "max_results": {
                             "type": "number",
-                            "description": "返回的最大结果数，默认为5",
-                            "default": 5,
+                            "description": "返回的最大结果数，默认为3",
+                            "default": 3,
                         },
                         "addition": {
                             "type": "string",
-                            "description": "附加信息，用自然语言描述，用以改进搜索结果。默认为空。",
+                            "description": "附加信息，用自然语言描述，用以改进搜索方向、Snippets的侧重点等。默认为空。",
                             "default": "",
                         },
                     },
@@ -131,7 +141,11 @@ class SearchTool(Tool):
         }
 
     async def execute(
-        self, query: str, max_results: int = 5, addition: str = ""
+        self,
+        query: str,
+        max_results: int = 3,
+        addition: str = "",
+        include_content: bool = True,
     ) -> str:
         message = [
             {
@@ -200,6 +214,11 @@ results:
                             timeout=10,
                         )
                         item["link"] = str(resp.url)
+                    if include_content:
+                        content = await self.fetch.execute(
+                            item["link"], max_length=3000
+                        )
+                        item["content"] = content
             return yaml.safe_dump(parsed, allow_unicode=True)
         except Exception as e:
             return f"搜索时出错：{e}"

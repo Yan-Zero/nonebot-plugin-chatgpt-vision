@@ -107,50 +107,49 @@ class MCPUnifiedClient:
     def __init__(self, spec: Any, start_timeout: float = 20.0):
         self.spec = spec
         self.start_timeout = start_timeout
+        self.client = FastMCPClient(self.spec)
 
     async def list_tools(self) -> list[dict[str, Any]]:
         try:
-            async with asyncio.timeout(self.start_timeout):
-                async with FastMCPClient(self.spec) as client:  # type: ignore[arg-type]
-                    tools = await client.list_tools()
-                    unified: list[dict[str, Any]] = []
-                    for t in tools:
-                        name = getattr(t, "name", None) or (
-                            t.get("name") if isinstance(t, dict) else None
-                        )
-                        if not name:
-                            continue
-                        description = (
-                            getattr(t, "description", None)
-                            or (t.get("description") if isinstance(t, dict) else None)
-                            or ""
-                        )
-                        input_schema = (
-                            getattr(t, "input_schema", None)
-                            or getattr(t, "inputSchema", None)
-                            or (t.get("input_schema") if isinstance(t, dict) else None)
-                            or (t.get("inputSchema") if isinstance(t, dict) else None)
-                            or {}
-                        )
-                        unified.append(
-                            {
+            async with asyncio.timeout(self.start_timeout), self.client:
+                tools = await self.client.list_tools()
+                unified: list[dict[str, Any]] = []
+                for t in tools:
+                    name = getattr(t, "name", None) or (
+                        t.get("name") if isinstance(t, dict) else None
+                    )
+                    if not name:
+                        continue
+                    description = (
+                        getattr(t, "description", None)
+                        or (t.get("description") if isinstance(t, dict) else None)
+                        or ""
+                    )
+                    input_schema = (
+                        getattr(t, "input_schema", None)
+                        or getattr(t, "inputSchema", None)
+                        or (t.get("input_schema") if isinstance(t, dict) else None)
+                        or (t.get("inputSchema") if isinstance(t, dict) else None)
+                        or {}
+                    )
+                    unified.append(
+                        {
+                            "name": name,
+                            "schema": {
                                 "name": name,
-                                "schema": {
-                                    "name": name,
-                                    "description": description,
-                                    "parameters": input_schema,
-                                },
-                            }
-                        )
-                    return unified
+                                "description": description,
+                                "parameters": input_schema,
+                            },
+                        }
+                    )
+                return unified
         except Exception:
             return []
 
     async def call_tool(self, name: str, arguments: dict[str, Any]) -> Any:
         try:
-            async with asyncio.timeout(self.start_timeout):
-                async with FastMCPClient(self.spec) as client:  # type: ignore[arg-type]
-                    return await client.call_tool(name, arguments)
+            async with asyncio.timeout(self.start_timeout), self.client:
+                return await self.client.call_tool(name, arguments)
         except Exception as ex:
             return {"error": f"工具 {name} 调用失败", "exception": str(ex)}
 
