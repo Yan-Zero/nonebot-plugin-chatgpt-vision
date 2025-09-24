@@ -1,4 +1,5 @@
 import yaml
+import asyncio
 import trafilatura
 
 from httpx import AsyncClient
@@ -153,6 +154,10 @@ class SearchTool(Tool):
 
 {f"附加信息：{addition}" if addition else ""}
 
+注意，如果是同一个页面的不同语种，视为同一个结果，请保留最佳的一个结果即可。例如：`https://zh.wikipedia.org/zh-cn/%E5%B9%BF%E5%BB%B6%E7%89%A9` 和 `https://zh.wikipedia.org/zh-tw/%E5%B9%BF%E5%BB%B6%E7%89%A9` 被视为同一个结果。保留其中一个即可（通常保留简体中文的版本）。
+
+结果应该多元化，也就是覆盖的范围要广，如果结果A完全囊括了结果B的内容，那么就不需要结果B。
+
 请使用yaml格式返回搜索结果，格式如下：
 ```yaml
 overview: <对搜索结果的简要总结，300字以内>
@@ -200,10 +205,10 @@ results:
             if not isinstance(parsed, dict) or "results" not in parsed:
                 return ret
 
-            for item in parsed["results"]:
+            async def _(client: AsyncClient, item: dict, include_content: bool) -> None:
                 if "link" not in item:
-                    continue
-                async with AsyncClient() as client:
+                    return
+                try:
                     resp = await client.head(
                         item["link"],
                         follow_redirects=True,
@@ -212,13 +217,17 @@ results:
                         },
                         timeout=10,
                     )
-                    if resp.status_code == 404:
-                        del item["link"]
-                        item["status"] = "Link returned 404 Not Found"
-                        continue
-                    item["link"] = str(resp.url)
+                except Exception as e:
+                    item["status"] = f"Error accessing link: {e}"
+                    del item["link"]
+                    return
+                if resp.status_code == 404:
+                    del item["link"]
+                    item["status"] = "Link returned 404 Not Found"
+                    return
+                item["link"] = str(resp.url)
                 if not include_content:
-                    continue
+                    return
                 try:
                     content, _ = await fetch_url(
                         item["link"],
@@ -238,6 +247,10 @@ results:
                         f"Error fetching content, you can tell user to browse it by themselves. Error: {e}"
                     )
 
-            return yaml.safe_dump(parsed, allow_unicode=True)
+            async with AsyncClient() as client:
+                await asyncio.gather(
+                    *[_(client, item, include_content) for item in parsed["results"]]
+                )
+            return yaml.safe_dump(parsed, allow_unicode=True).strip()
         except Exception as e:
             return f"搜索时出错：{e}"

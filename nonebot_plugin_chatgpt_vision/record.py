@@ -491,7 +491,9 @@ def xml_to_v11msg(xml: str) -> Iterable[V11Msg]:
                 if lang.lower() == "markdown":
                     segments.append(V11Seg.image(file=f"MARKDOWN://{code}"))
                 else:
-                    segments.append(V11Seg.text(f"```{lang}\n{code}\n```"))
+                    segments.append(
+                        V11Seg.image(file=f"MARKDOWN://```{lang}\n{code}\n```")
+                    )
             elif sub.tag == "tex":
                 # <tex>...</tex>
                 code = sub.text or ""

@@ -391,7 +391,9 @@ class GroupRecord:
                     # 携带工具结果继续获取最终回复
                     if not content:
                         yield "<p>[使用工具中...]</p>"
-                    for tool_call in choice.message.tool_calls:
+
+                    async def _(tool_call) -> str:
+                        nonlocal self
                         function_name = tool_call.function.name
                         function_args = json.loads(tool_call.function.arguments)
                         try:
@@ -400,17 +402,6 @@ class GroupRecord:
                             )
                         except Exception as ex:
                             result = f"工具调用失败：{ex}"
-                        yield (
-                            f"<p><code lang=\"markdown\"><![CDATA[# {function_name.replace(']]>', ']]]]><![CDATA[>')}\n"
-                            "## 调用参数\n"
-                            "```\n"
-                            f"{yaml.safe_dump(function_args, allow_unicode=True).replace(']]>', ']]]]><![CDATA[>')}\n"
-                            "```\n"
-                            "## 调用结果\n"
-                            "```\n"
-                            f"{result.replace(']]>', ']]]]><![CDATA[>')}"
-                            "\n```]]></code></p>"
-                        )
                         await self.append(
                             RecordSeg(
                                 function_name,
@@ -420,7 +411,22 @@ class GroupRecord:
                                 datetime.now(),
                             )
                         )
+                        return (
+                            f"<p><code lang=\"markdown\"><![CDATA[# {function_name.replace(']]>', ']]]]><![CDATA[>')}\n"
+                            "## 调用参数\n"
+                            "```yaml\n"
+                            f"{yaml.safe_dump(function_args, allow_unicode=True).replace(']]>', ']]]]><![CDATA[>').strip()}\n"
+                            "```\n"
+                            "## 调用结果\n"
+                            "```\n"
+                            f"{result.replace(']]>', ']]]]><![CDATA[>')}\n"
+                            "```]]></code></p>"
+                        )
 
+                    for tr in asyncio.as_completed(
+                        [_(tc) for tc in choice.message.tool_calls]
+                    ):
+                        yield await tr
                     async for i in recursive(self, recursion_depth - 1):
                         yield i
             except Exception as ex:
