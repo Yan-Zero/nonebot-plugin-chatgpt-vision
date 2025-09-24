@@ -20,6 +20,7 @@ dependencies = [
     "aiohttp>=3.12.15",
     "trafilatura>=1.6.1",
     "httpx>=0.28.1",
+    "charset-normalizer>=3.4.3",
 ]
 name = "nonebot-plugin-chatgpt-vision"
 version = "1.2.2"

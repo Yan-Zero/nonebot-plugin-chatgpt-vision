@@ -3,6 +3,7 @@ import trafilatura
 
 from httpx import AsyncClient
 from typing import Tuple, Any
+from charset_normalizer import from_bytes
 
 from . import Tool
 from ..chat import chat
@@ -15,7 +16,13 @@ async def fetch_url(
         rsp = await client.get(url, headers={"User-Agent": user_agent}, timeout=15)
         rsp.raise_for_status()
         content_type = rsp.headers.get("Content-Type", "")
-        downloaded = rsp.text
+        if not rsp.encoding or rsp.encoding == "ISO-8859-1":
+            # 尝试从内容中检测编码
+            detected = from_bytes(rsp.content).best()
+            if detected and detected.encoding:
+                rsp.encoding = detected.encoding
+        else:
+            downloaded = rsp.text
     is_page_html = (
         "<html" in downloaded[:100] or "text/html" in content_type or not content_type
     )
@@ -194,36 +201,43 @@ results:
                 return ret
 
             for item in parsed["results"]:
-                if "link" in item:
-                    async with AsyncClient() as client:
-                        resp = await client.head(
-                            item["link"],
-                            follow_redirects=True,
-                            headers={
-                                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-                            },
-                            timeout=10,
+                if "link" not in item:
+                    continue
+                async with AsyncClient() as client:
+                    resp = await client.head(
+                        item["link"],
+                        follow_redirects=True,
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
+                        },
+                        timeout=10,
+                    )
+                    if resp.status_code == 404:
+                        del item["link"]
+                        item["status"] = "Link returned 404 Not Found"
+                        continue
+                    item["link"] = str(resp.url)
+                if not include_content:
+                    continue
+                try:
+                    content, _ = await fetch_url(
+                        item["link"],
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+                    )
+                    if len(content) > 2000:
+                        content = (
+                            content[:2000]
+                            + "\n\n[内容过长已截断，请使用 fetch 工具获取完整内容]"
                         )
-                        item["link"] = str(resp.url)
-                    if include_content:
-                        try:
-                            content, _ = await fetch_url(
-                                item["link"],
-                                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
-                            )
-                            if len(content) > 2000:
-                                content = (
-                                    content[:2000]
-                                    + "\n\n[内容过长已截断，请使用 fetch 工具获取完整内容]"
-                                )
-                                item["content"] = content
-                            else:
-                                item["content"] = content
-                                del item["snippet"]
-                        except Exception as e:
-                            item["content"] = (
-                                f"Error fetching content, you can tell user to browse it by themselves. Error: {e}"
-                            )
+                        item["content"] = content
+                    else:
+                        item["content"] = content
+                        del item["snippet"]
+                except Exception as e:
+                    item["content"] = (
+                        f"Error fetching content, you can tell user to browse it by themselves. Error: {e}"
+                    )
+
             return yaml.safe_dump(parsed, allow_unicode=True)
         except Exception as e:
             return f"搜索时出错：{e}"
