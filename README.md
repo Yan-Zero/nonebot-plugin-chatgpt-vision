@@ -126,13 +126,6 @@ http:
     ...
   bot_id: '<BOT_QQ_ID>'
   bot_name: '苦咖啡'
-  # 以下为可选项，对应 GroupRecord 可配置项
-  # min_rest: 30
-  # max_rest: 60
-  # cd: 8
-  # ban_delta: 150
-  # image_mode: 1
-  # searcher: "duckduckgo"  # 如启用内置搜索工具
 ```
 
 ## 常见问题

@@ -99,8 +99,13 @@ class FetchUrlTool(Tool):
     ) -> str:
         try:
             content, prefix = await fetch_url(url, self.user_agent, force_raw=raw)
-            content = content[start_index : start_index + max_length]
-            return prefix + content
+            if len(content) > start_index + max_length:
+                return (
+                    prefix
+                    + content[start_index : start_index + max_length]
+                    + "\n\n[内容过长已截断，请调整 start_index 或 max_length 参数]"
+                )
+            return prefix + content[start_index:]
         except Exception as e:
             return f"Error fetching URL {url}: {e}"
 
@@ -110,7 +115,7 @@ class SearchTool(Tool):
         return {
             "type": "function",
             "function": {
-                "name": "search",
+                "name": "web_search_google",
                 "description": "使用网络搜索引擎搜索信息。通常而言这些 link 都是网页，而不是具体的资源链接。因此你必须使用 fetch 之类的工具来获取网页内容，才会知道具体的信息。",
                 "parameters": {
                     "type": "object",

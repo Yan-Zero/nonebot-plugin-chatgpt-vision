@@ -2,9 +2,10 @@ import yaml
 import bisect
 
 from lxml import etree  # type: ignore
-from collections.abc import Iterable
 from typing import Any, Optional
+from nonebot import logger
 from datetime import datetime
+from collections.abc import Iterable
 from nonebot.adapters.onebot.v11.message import Message as V11Msg
 from nonebot.adapters.onebot.v11.message import MessageSegment as V11Seg
 
@@ -18,14 +19,21 @@ async def v11msg_to_xml_async(
 
     # 用于把顺序文本正确放入 parent.text / last_child.tail
     def _append_text(parent: etree._Element, text: str):
-        if not text:
-            return
-        children = list(parent)
-        if not children:
-            parent.text = (parent.text or "") + text
-        else:
-            last = children[-1]
-            last.tail = (last.tail or "") + text
+        def _append_to(element: etree._Element, text: str):
+            if not text:
+                return
+            children = list(element)
+            if not children:
+                element.text = (element.text or "") + text
+            else:
+                last = children[-1]
+                last.tail = (last.tail or "") + text
+
+        parts = text.split("\n")
+        for i, part in enumerate(parts):
+            if i > 0:
+                etree.SubElement(parent, "br")
+            _append_to(parent, part)
 
     # 创建根 <p>
     p = etree.Element("p")
@@ -39,7 +47,7 @@ async def v11msg_to_xml_async(
         data = seg.data
 
         if st == "text":
-            _append_text(p, data.get("text", "").replace("\n", "<br/>"))
+            _append_text(p, data.get("text", ""))
 
         elif st == "at":
             # <mention uid="...">可选 name</mention>
@@ -272,6 +280,9 @@ class RecordList:
                 continue
             if record.uid == "tool":
                 id, content = record.msg[0]
+                if not record.name:
+                    logger.warning("Tool record without name")
+                    record.name = "unknown_tool"
                 ret.append(
                     {
                         "role": "tool",
