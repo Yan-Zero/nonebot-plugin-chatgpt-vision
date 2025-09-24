@@ -1,7 +1,7 @@
 # nonebot-plugin-chatgpt-vision
 
 [![license](https://img.shields.io/github/license/Yan-Zero/nonebot-plugin-chatgpt-vision.svg)](./LICENSE)
-[![pypi](https://img.shields.io/pypi/v/nonebot-plugin-chatgpt-vision.svg)](https://pypi.python.org/pypi/nonebot-plugin-chatgpt-vision)
+<!-- [![pypi](https://img.shields.io/pypi/v/nonebot-plugin-chatgpt-vision.svg)](https://pypi.python.org/pypi/nonebot-plugin-chatgpt-vision) -->
 ![python](https://img.shields.io/badge/python-3.11+-blue.svg)
 
 

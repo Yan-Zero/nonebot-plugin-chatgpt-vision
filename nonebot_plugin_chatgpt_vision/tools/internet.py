@@ -14,7 +14,17 @@ async def fetch_url(
     url: str, user_agent: str, force_raw: bool = False
 ) -> Tuple[str, str]:
     async with AsyncClient() as client:
-        rsp = await client.get(url, headers={"User-Agent": user_agent}, timeout=15)
+        rsp = await client.get(
+            url,
+            headers={
+                "User-Agent": user_agent,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+                "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Connection": "keep-alive",
+            },
+            timeout=15,
+        )
         rsp.raise_for_status()
         content_type = rsp.headers.get("Content-Type", "")
         if not rsp.encoding or rsp.encoding == "ISO-8859-1":

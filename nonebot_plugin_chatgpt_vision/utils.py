@@ -11,7 +11,7 @@ from PIL import Image
 from lxml import etree  # type: ignore
 from typing import List
 from nonebot import logger
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote_plus, urlparse, parse_qs, urlencode, urlunparse
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
 
@@ -49,6 +49,11 @@ def correct_tencent_image_url(url: str) -> str:
         ("https://multimedia.nt.qq.com.cn", "http://multimedia.nt.qq.com.cn")
     ):
         return url
+    if RKEY.get("group", (datetime.min, ""))[0] < datetime.now():
+        data = httpx.get("https://llob.linyuchen.net/rkey").json()
+        time = datetime.fromtimestamp(data.get("expired_time")) - timedelta(seconds=300)
+        RKEY["group"] = (time, data.get("group_rkey", "")[6:])
+        RKEY["private"] = (time, data.get("private_rkey", "")[6:])
     parsed = urlparse(url)
     params = parse_qs(parsed.query)
     params["rkey"] = [RKEY.get("group", (None, ""))[1]]

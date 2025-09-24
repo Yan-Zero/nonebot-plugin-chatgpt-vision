@@ -5,8 +5,7 @@ import random
 import pathlib
 
 from nonebot import on_command, on_notice, on_message, logger
-from datetime import datetime, timedelta
-from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from datetime import datetime
 from nonebot.rule import Rule
 from nonebot.rule import to_me
 from nonebot.params import CommandArg
@@ -23,7 +22,6 @@ from nonebot.adapters.onebot.v11.permission import GROUP_ADMIN
 
 from .group import GroupRecord, SpecialOperation
 from .utils import (
-    RKEY,
     FORBIDDEN_TOOLS,
     check_url_status,
     convert_tex_to_png,
@@ -301,14 +299,6 @@ async def _(bot: V11Bot, event: V11G, state):
             return
     group.rest = random.randint(group.min_rest, group.max_rest)
     group.last_time = datetime.now()
-
-    if RKEY.get("group", (datetime.min, ""))[0] < datetime.now():
-        for item in (await bot.call_api("get_rkey")).get("rkeys", []):
-            RKEY[item.get("type")] = (
-                datetime.fromtimestamp(item.get("created_at", 0))
-                + timedelta(seconds=item.get("ttl", 0) - 300),
-                item.get("rkey", "")[6:],
-            )
 
     try:
         await say(group, event, bot, humanlike)
