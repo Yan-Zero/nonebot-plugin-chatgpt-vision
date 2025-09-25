@@ -50,6 +50,9 @@ class GroupRecord:
     base64: bool = False
     """是否使用 base64 传输图片，默认否"""
 
+    show_tool_result: bool = True
+    """显示工具调用的结果"""
+
     lock: asyncio.Lock
     mcp_loaded: bool = False
     tool_manager: ToolManager
@@ -198,6 +201,7 @@ class GroupRecord:
         image_mode: Optional[int] = None,
         base64: Optional[bool] = None,
         first_msg: Optional[dict] = None,
+        show_tool_result: Optional[bool] = None,
         **kwargs,
     ):
         if bot_name is not None:
@@ -229,6 +233,8 @@ class GroupRecord:
                 self.first_msg = first_msg
             else:
                 raise ValueError("first_msg must be a dict or RecordSeg")
+        if show_tool_result is not None:
+            self.show_tool_result = show_tool_result
 
     async def append(
         self,
@@ -426,7 +432,9 @@ class GroupRecord:
                     for tr in asyncio.as_completed(
                         [_(tc) for tc in choice.message.tool_calls]
                     ):
-                        yield await tr
+                        r = await tr
+                        if self.show_tool_result:
+                            yield r
                     async for i in recursive(self, recursion_depth - 1):
                         yield i
             except Exception as ex:

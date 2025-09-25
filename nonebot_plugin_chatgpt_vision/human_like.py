@@ -84,6 +84,30 @@ try:
 except Exception as ex:
     print(ex)
 
+remake = on_command(
+    "remake",
+    rule=to_me(),
+    permission=SUPERUSER | GROUP_ADMIN,
+    priority=5,
+    force_whitespace=True,
+    block=True,
+)
+tool_manager = on_command(
+    "tool",
+    rule=to_me(),
+    permission=SUPERUSER | GROUP_ADMIN,
+    priority=5,
+    force_whitespace=True,
+    block=True,
+)
+reload_config = on_command(
+    "reload_human_config",
+    rule=to_me(),
+    permission=SUPERUSER,
+    priority=5,
+    block=True,
+)
+
 
 async def human_like_group(bot: Bot, event: Event) -> bool:
     if not p_config.chat_mode or not isinstance(event, V11G):
@@ -95,7 +119,20 @@ async def human_like_group(bot: Bot, event: Event) -> bool:
     return group_id in p_config.chat_group
 
 
+async def human_like_on_notice(bot: Bot, event: Event):
+    if not p_config.chat_mode or not isinstance(event, NoticeEvent):
+        return False
+    if not event.notice_type.startswith("group_"):
+        return False
+    try:
+        group_id = str(event.group_id)  # type: ignore
+    except Exception:
+        return False
+    return group_id in GROUP_RECORD
+
+
 humanlike = on_message(rule=Rule(human_like_group), priority=1, block=False)
+human_notion = on_notice(rule=Rule(human_like_on_notice))
 
 
 async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
@@ -308,21 +345,6 @@ async def _(bot: V11Bot, event: V11G, state):
     await save_group_record(str(event.group_id))
 
 
-async def human_like_on_notice(bot: Bot, event: Event):
-    if not p_config.chat_mode or not isinstance(event, NoticeEvent):
-        return False
-    if not event.notice_type.startswith("group_"):
-        return False
-    try:
-        group_id = str(event.group_id)  # type: ignore
-    except Exception:
-        return False
-    return group_id in GROUP_RECORD
-
-
-human_notion = on_notice(rule=Rule(human_like_on_notice))
-
-
 @human_notion.handle()
 async def _(bot: V11Bot, event: NoticeEvent):
     group_id = str(getattr(event, "group_id", None))
@@ -380,16 +402,6 @@ async def _(bot: V11Bot, event: NoticeEvent):
     await save_group_record(group_id)
 
 
-remake = on_command(
-    "remake",
-    rule=to_me(),
-    permission=SUPERUSER | GROUP_ADMIN,
-    priority=5,
-    force_whitespace=True,
-    block=True,
-)
-
-
 @remake.handle()
 async def _(bot: Bot, event: V11G, state):
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
@@ -399,22 +411,12 @@ async def _(bot: Bot, event: V11G, state):
         await remake.finish("已重置")
 
 
-tool_manager = on_command(
-    "tool",
-    rule=to_me(),
-    permission=SUPERUSER | GROUP_ADMIN,
-    priority=5,
-    force_whitespace=True,
-    block=True,
-)
-
-
 @tool_manager.handle()
 async def _(bot: Bot, event: V11G, p=CommandArg()):
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
     args: list[str] = p.extract_plain_text().strip().split()
-    if args[0] not in ["enable", "disable", "list"]:
-        await tool_manager.finish("用法：tool <enable|disable|list> [工具名]")
+    if args[0] not in ["enable", "disable", "list", "display"]:
+        await tool_manager.finish("用法：tool <enable|disable|list|display> [工具名]")
     if args[0] == "list":
         msg = "已启用的工具：\n"
         for name, tool in group.tool_manager.tools.items():
@@ -425,8 +427,13 @@ async def _(bot: Bot, event: V11G, p=CommandArg()):
             if not group.tool_manager.enable.get(name, False):
                 msg += f"- {name}\n"
         await tool_manager.finish(msg)
+    if args[0] == "display":
+        group.show_tool_result = not group.show_tool_result
+        await tool_manager.finish(
+            f"已{'启用' if group.show_tool_result else '禁用'}工具结果显示"
+        )
     if len(args) != 2:
-        await tool_manager.finish("用法：tool <enable|disable|list> [工具名]")
+        await tool_manager.finish("用法：tool <enable|disable|list|display> [工具名]")
     name = args[1]
     if name not in group.tool_manager.tools:
         await tool_manager.finish(f"工具 {name} 不存在")
@@ -437,4 +444,40 @@ async def _(bot: Bot, event: V11G, p=CommandArg()):
         group.tool_manager.disable_tool(name)
         await tool_manager.finish(f"已禁用工具 {name}")
     else:
-        await tool_manager.finish("用法：tool <enable|disable|list> [工具名]")
+        await tool_manager.finish("用法：tool <enable|disable|list|display> [工具名]")
+
+
+@reload_config.handle()
+async def _(bot: Bot, event: Event):
+    # 重新加载配置文件，只加载对应群的配置
+    try:
+        group_id = str(event.group_id)  # type: ignore
+    except Exception:
+        await reload_config.finish("只能在群聊中使用")
+        return
+
+    try:
+        if not os.path.exists("data/human"):
+            os.mkdir("data/human")
+        with open("configs/chatgpt-vision/human.yaml", "r", encoding="utf-8") as f:
+            _CONFIG = yaml.safe_load(f) or {}  # type: ignore
+    except Exception as ex:
+        logger.error(ex)
+        await reload_config.finish("加载主配置文件失败")
+        return
+    if group_id in _CONFIG:
+        GROUP_RECORD[group_id] = GroupRecord(**_CONFIG.get(group_id, {}))
+    try:
+        with open(f"./data/human/{group_id}.yaml", "r", encoding="utf-8") as f:
+            data: dict = yaml.load(f, yaml.UnsafeLoader)  # type: ignore
+            for k in data:
+                if k == group_id:
+                    GROUP_RECORD[k].msgs = data[k].get("msgs", RecordList())
+                    GROUP_RECORD[k].rest = data[k].get("rest", 100)
+                    GROUP_RECORD[k].block_list = data[k].get("block_list", {})
+                    GROUP_RECORD[k].credit = data[k].get("credit", 1)
+    except Exception as ex:
+        print(ex)
+        await reload_config.finish("加载群配置文件失败")
+        return
+    await reload_config.finish("配置已重新加载")
