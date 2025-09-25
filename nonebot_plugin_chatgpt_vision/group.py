@@ -240,23 +240,23 @@ class GroupRecord:
         self,
         record: RecordSeg,
     ):
-        pop = set()
-        for i in range(len(record.images)):
-            if record.images[i].startswith("data:"):
-                continue
-            if not self.base64:
-                continue
+        async def _(url: str) -> str | None:
             try:
-                record.images[i] = await download_image_to_base64(record.images[i])
+                if url.startswith("data:"):
+                    return url
+                return await download_image_to_base64(url)
             except Exception as ex:
                 logger.warning(f"图片下载失败：{ex}")
-                pop.add(i)
-        if pop:
-            record.images = [v for i, v in enumerate(record.images) if i not in pop]
+                return None
+
+        if self.base64:
+            record.images = list(
+                filter(None, await asyncio.gather(*[_(url) for url in record.images]))
+            )
 
         self.msgs.add(record)
-        if len(self.msgs) > self.max_logs:
-            self.msgs.pop(0)
+        while len(self.msgs) > self.max_logs:
+            self.msgs.remove(0)
 
     def block(self, id: str, delta: float = 150) -> float:
         try:

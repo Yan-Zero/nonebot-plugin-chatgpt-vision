@@ -311,7 +311,7 @@ class RecordList:
     def __getitem__(self, index: int) -> RecordSeg:
         return self.records[index]
 
-    def pop(self, index: int, ensure_correct: bool = True) -> Iterable[RecordSeg]:
+    def remove(self, index: int, ensure_correct: bool = True) -> None:
         """
         移除指定位置的消息，并确保上下文是符合相对应的要求。（例如TOOL CALL必须在用户消息之后之类的）
 
@@ -328,20 +328,16 @@ class RecordList:
         Iterable[RecordSeg]
             被移除的消息列表
         """
-        if not ensure_correct:
-            return [self.records.pop(index)]
         if index >= len(self.records):
             raise IndexError("RecordList index out of range")
-
         index %= len(self.records)
-        if self.records[index].uid == "tool":
-            # TOOL 不需要管太多
-            return [self.records.pop(index)]
-        if index == len(self.records) - 1:
-            # 最后一条消息，直接删除
-            return [self.records.pop(index)]
-
-        yield self.records.pop(index)
+        self.records.pop(index)
+        if (
+            not ensure_correct
+            or self.records[index].uid == "tool"
+            or len(self.records) == 1
+        ):
+            return
         if index == 0:
             is_tool_call = False
             for id, _ in self.records[0].msg:
@@ -349,12 +345,12 @@ class RecordList:
                     is_tool_call = True
                     break
             if is_tool_call:
-                yield from self.pop(0, ensure_correct=True)
+                self.remove(0, ensure_correct=True)
             return
 
         while index < len(self.records):
             if self.records[index].uid == "tool":
-                yield self.records.pop(index)
+                self.records.pop(index)
 
     async def remove_bad_images(self):
         """
