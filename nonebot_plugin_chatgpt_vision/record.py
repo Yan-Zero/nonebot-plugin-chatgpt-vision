@@ -332,12 +332,10 @@ class RecordList:
             raise IndexError("RecordList index out of range")
         index %= len(self.records)
         self.records.pop(index)
-        if (
-            not ensure_correct
-            or self.records[index].uid == "tool"
-            or len(self.records) == 1
-        ):
+        if not ensure_correct or len(self.records) == 1:
             return
+        while len(self.records) > 0 and self.records[0].uid == "tool":
+            self.records.pop(0)
         if index == 0:
             is_tool_call = False
             for id, _ in self.records[0].msg:

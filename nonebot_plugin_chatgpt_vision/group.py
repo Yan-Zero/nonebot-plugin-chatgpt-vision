@@ -1,5 +1,6 @@
 import json
 import yaml
+import random
 import asyncio
 
 from enum import Enum
@@ -59,6 +60,10 @@ class GroupRecord:
 
     first_msg: Optional[RecordSeg] = None
     """第一条消息，也就是不会被删除的消息"""
+    model_weights: dict[str, float] = {}
+    """模型权重，用于随机选择模型"""
+    next_model: Optional[str] = None
+    """下一个要使用的模型，空则随机选择（或使用默认模型）"""
 
     def __init__(
         self,
@@ -108,6 +113,7 @@ class GroupRecord:
                 "fetch",
             ]
         self.mcp_config = mcp_config
+        self.model_weights = {}
         self.set(**kwargs)
         self.rest = self.max_rest
 
@@ -202,6 +208,7 @@ class GroupRecord:
         base64: Optional[bool] = None,
         first_msg: Optional[dict] = None,
         show_tool_result: Optional[bool] = None,
+        model_weights: Optional[dict[str, float]] = None,
         **kwargs,
     ):
         if bot_name is not None:
@@ -235,6 +242,8 @@ class GroupRecord:
                 raise ValueError("first_msg must be a dict or RecordSeg")
         if show_tool_result is not None:
             self.show_tool_result = show_tool_result
+        if model_weights is not None:
+            self.model_weights = model_weights
 
     async def append(
         self,
@@ -347,10 +356,18 @@ class GroupRecord:
                 await self.msgs.remove_bad_images()
                 messages = self.merge()
 
+                if self.next_model:
+                    model, self.next_model = self.next_model, None
+                elif self.model_weights:
+                    model = random.choices(*zip(*self.model_weights.items()), k=1)[0]
+                else:
+                    model = self.model
+                logger.info(f"Using model: {model}")
+
                 # 调用带工具的聊天API
                 msg = await chat(
                     message=messages,
-                    model=self.model,
+                    model=model,
                     temperature=0.8,
                     max_tokens=4096 * 2,
                     tools=tools if tools else None,

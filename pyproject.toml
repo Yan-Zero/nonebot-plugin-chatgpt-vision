@@ -23,7 +23,7 @@ dependencies = [
     "charset-normalizer>=3.4.3",
 ]
 name = "nonebot-plugin-chatgpt-vision"
-version = "1.2.9"
+version = "1.2.10"
 description = ""
 readme = "README.md"
 

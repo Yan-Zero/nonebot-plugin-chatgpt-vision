@@ -308,7 +308,6 @@ async def _(bot: V11Bot, event: V11G, state):
 
     _msg, imgs = await v11msg_to_xml_async(msg, str(event.message_id))
     await group.append(
-        # user_name, uid, msg, event.message_id, datetime.now(), reply=reply
         RecordSeg(
             name=user_name,
             uid=uid,
@@ -333,10 +332,12 @@ async def _(bot: V11Bot, event: V11G, state):
                 return
             if random.random() < 0.7:
                 return
-        if random.random() < 0.02:
+        if random.random() < 0.02 and not await SUPERUSER(bot, event):
             return
     group.rest = random.randint(group.min_rest, group.max_rest)
     group.last_time = datetime.now()
+    if await SUPERUSER(bot, event):
+        group.next_model = group.model
 
     try:
         await say(group, event, bot, humanlike)
