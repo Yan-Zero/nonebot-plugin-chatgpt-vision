@@ -18,6 +18,7 @@ from .utils import (
     convert_gif_to_png_base64,
     correct_tencent_image_url,
 )
+from .config import p_config
 
 
 async def v11msg_to_xml_async(
@@ -368,7 +369,7 @@ class RecordList:
                 )
             )
 
-        async with aiohttp.ClientSession() as client:
+        async with aiohttp.ClientSession(proxy=p_config.tool_proxy_url) as client:
             await asyncio.gather(*map(partial(_, client=client), self.records))
 
 

@@ -9,12 +9,13 @@ from charset_normalizer import from_bytes
 from . import Tool
 from ..chat import chat
 from ..utils import correct_tencent_image_url
+from ..config import p_config
 
 
 async def fetch_url(
     url: str, user_agent: str, force_raw: bool = False
 ) -> Tuple[str, str]:
-    async with AsyncClient() as client:
+    async with AsyncClient(proxy=p_config.tool_proxy_url) as client:
         rsp = await client.get(
             url,
             headers={
@@ -285,7 +286,7 @@ results:
                         f"Error fetching content, you can tell user to browse it by themselves. Error: {e}"
                     )
 
-            async with AsyncClient() as client:
+            async with AsyncClient(proxy=p_config.tool_proxy_url) as client:
                 await asyncio.gather(
                     *[_(client, item, include_content) for item in parsed["results"]]
                 )

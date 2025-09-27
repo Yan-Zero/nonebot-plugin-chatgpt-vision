@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 from urllib.parse import quote_plus, urlparse, parse_qs, urlencode, urlunparse
 from xml.sax.saxutils import escape as _xml_escape, quoteattr as _xml_q
 
+from .config import p_config
+
 QFACE = {}
 try:
     with open(pathlib.Path(__file__).parent / "qface.json", "r", encoding="utf-8") as f:
@@ -123,7 +125,7 @@ async def check_url_status(url: str, session: aiohttp.ClientSession) -> str | No
         pass
 
 
-async def download_image_to_base64(url: str) -> str:
+async def download_image_to_base64(url: str, session: aiohttp.ClientSession) -> str:
     """
     下载图片并转换为base64编码的data URL
 
@@ -134,19 +136,18 @@ async def download_image_to_base64(url: str) -> str:
         base64编码的data URL
     """
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    return url
+        async with session.get(url) as response:
+            if response.status != 200:
+                return url
 
-                content = await response.read()
+            content = await response.read()
 
-                # 转换为base64
-                base64_data = base64.b64encode(content).decode("utf-8")
+            # 转换为base64
+            base64_data = base64.b64encode(content).decode("utf-8")
 
-                # 尝试获取图片格式
-                content_type = response.headers.get("Content-Type", "image/png")
-                return f"data:{content_type};base64,{base64_data}"
+            # 尝试获取图片格式
+            content_type = response.headers.get("Content-Type", "image/png")
+            return f"data:{content_type};base64,{base64_data}"
 
     except Exception as e:
         from nonebot import logger
@@ -157,37 +158,37 @@ async def download_image_to_base64(url: str) -> str:
     return url
 
 
-async def convert_tex_to_png(tex: str) -> bytes | None:
+async def convert_tex_to_png(tex: str, session: aiohttp.ClientSession) -> bytes | None:
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(
-                "https://www.zhihu.com/equation?tex=" + quote_plus(tex)
-            ) as response:
-                if response.status != 200:
-                    return None
-                svg_content = await response.text()
-                png_data = cairosvg.svg2png(
-                    bytestring=svg_content.encode("utf-8"),
-                    scale=2,
-                    background_color="#FFFBE6",  # 淡黄色（可换成你想要的 CSS 颜色）
-                )
-                return png_data
+        async with session.get(
+            "https://www.zhihu.com/equation?tex=" + quote_plus(tex)
+        ) as response:
+            if response.status != 200:
+                return None
+            svg_content = await response.text()
+            png_data = cairosvg.svg2png(
+                bytestring=svg_content.encode("utf-8"),
+                scale=2,
+                background_color="#FFFBE6",  # 淡黄色（可换成你想要的 CSS 颜色）
+            )
+            return png_data
     except Exception as e:
         logger.error(f"公式渲染失败: {e}")
         return None
 
 
-async def convert_markdown_to_png(markdown: str, url: str) -> bytes | None:
+async def convert_markdown_to_png(
+    markdown: str, url: str, session: aiohttp.ClientSession
+) -> bytes | None:
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url,
-                data=markdown.encode("utf-8"),
-            ) as response:
-                if response.status != 200:
-                    return None
-                png_data = await response.read()
-                return png_data
+        async with session.post(
+            url,
+            data=markdown.encode("utf-8"),
+        ) as response:
+            if response.status != 200:
+                return None
+            png_data = await response.read()
+            return png_data
     except Exception as e:
         logger.error(f"Markdown渲染失败: {e}")
         return None
@@ -334,7 +335,11 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
 
         def _flush_p(self):
             if self.cur:
-                self.out_ps.append("<p>" + "".join(self.cur) + "</p>")
+                p = "".join(self.cur)
+                if p_config.chat_remove_period:
+                    if p.endswith("。") and not p.endswith("。。"):
+                        p = p[:-1]
+                self.out_ps.append("<p>" + p + "</p>")
                 self.cur.clear()
             self.reply_seen_in_p = False
 
@@ -344,6 +349,9 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
             fragment = "".join(self.outside)
             # 仅当“可见”时才包成段；否则丢弃（避免 <p>\n\n</p>）
             if _has_visible(fragment):
+                if p_config.chat_remove_period:
+                    if fragment.endswith("。") and not fragment.endswith("。。"):
+                        fragment = fragment[:-1]
                 self.out_ps.append("<p>" + fragment + "</p>")
             self.outside.clear()
 

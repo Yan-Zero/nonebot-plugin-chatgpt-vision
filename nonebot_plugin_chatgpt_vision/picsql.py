@@ -24,7 +24,8 @@ else:
             async with aiohttp.ClientSession(
                 headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
-                }
+                },
+                proxy=p_config.tool_proxy_url,
             ) as session:
                 rsp = await session.get(
                     f"https://www.doutupk.com/search?keyword={quote(name)}"

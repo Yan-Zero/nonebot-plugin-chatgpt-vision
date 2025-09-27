@@ -35,7 +35,6 @@
 | human_like_chat | bool | False | 是否启用 Human Like 群聊模式 |
 | human_like_group | list[str] | [] | 启用 Human Like 的群号列表（字符串） |
 | human_like_max_log | int | 60 | Human Like 保存的聊天记录条数 |
-| openai_default_model | str | gpt-4o | 默认对话模型 |
 | fallback_model | str | gemini-2.5-flash | 回退模型（默认模型不可用或超限时） |
 | max_chatlog_count | int | 15 | 普通对话历史消息条数上限 |
 | max_history_tokens | int | 3000 | 历史消息 Token 上限（仅 user） |

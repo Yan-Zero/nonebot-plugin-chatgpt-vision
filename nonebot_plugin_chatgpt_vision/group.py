@@ -1,6 +1,7 @@
 import json
 import yaml
 import random
+import aiohttp
 import asyncio
 
 from enum import Enum
@@ -33,7 +34,7 @@ class SpecialOperation(Enum):
 class GroupRecord:
     msgs: RecordList
     system_prompt: str
-    model: str = p_config.openai_default_model
+    model: str = p_config.fallback_model
     bot_name: str = "苦咖啡"
     rest: int
     last_time: datetime = datetime.now()
@@ -249,20 +250,25 @@ class GroupRecord:
         self,
         record: RecordSeg,
     ):
-        async def _(url: str) -> str | None:
+        async def _(url: str, session: aiohttp.ClientSession) -> str | None:
             try:
                 if url.startswith("data:"):
                     return url
-                return await download_image_to_base64(url)
+                return await download_image_to_base64(url, session)
             except Exception as ex:
                 logger.warning(f"图片下载失败：{ex}")
                 return None
 
         if self.base64:
-            record.images = list(
-                filter(None, await asyncio.gather(*[_(url) for url in record.images]))
-            )
-
+            async with aiohttp.ClientSession(proxy=p_config.tool_proxy_url) as session:
+                record.images = list(
+                    filter(
+                        None,
+                        await asyncio.gather(
+                            *[_(url, session) for url in record.images]
+                        ),
+                    )
+                )
         self.msgs.add(record)
         while len(self.msgs) > self.max_logs:
             self.msgs.remove(0)

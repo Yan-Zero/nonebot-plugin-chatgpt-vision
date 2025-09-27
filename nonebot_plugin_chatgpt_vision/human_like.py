@@ -137,63 +137,68 @@ human_notion = on_notice(rule=Rule(human_like_on_notice))
 
 async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
     async def convert_image(msg: V11Msg) -> V11Msg:
-        for seg in msg:
-            if seg.type != "image":
-                continue
-            name = seg.data.get("file", "")
-            if name.startswith("http"):
-                if name.startswith(
-                    (
-                        "https://multimedia.nt.qq.com.cn",
-                        "http://multimedia.nt.qq.com.cn",
-                    )
-                ):
-                    seg.data["file"] = correct_tencent_image_url(name)
-                async with aiohttp.ClientSession() as client:
-                    if await check_url_status(name, client):
-                        continue
-                seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"
-                continue
-            elif name.startswith("MATH://"):
-                code = name[7:]
-                png = await convert_tex_to_png(code)
-                if png:
-                    seg.data = V11Seg.image(file=png).data
-                else:
-                    seg.type = "text"
-                    seg.data = {"text": f"${code}$"}
-                continue
-            elif name.startswith("MARKDOWN://"):
-                code = name[11:]
-                if not p_config.markdown_server:
-                    seg.type = "text"
-                    seg.data = {"text": code}
+        async with aiohttp.ClientSession(proxy=p_config.tool_proxy_url) as session:
+            for seg in msg:
+                if seg.type != "image":
                     continue
-                png = await convert_markdown_to_png(code, p_config.markdown_server)
-                if png:
-                    seg.data = V11Seg.image(file=png).data
+                name = seg.data.get("file", "")
+                if name.startswith("http"):
+                    if name.startswith(
+                        (
+                            "https://multimedia.nt.qq.com.cn",
+                            "http://multimedia.nt.qq.com.cn",
+                        )
+                    ):
+                        seg.data["file"] = correct_tencent_image_url(name)
+                    async with aiohttp.ClientSession(
+                        proxy=p_config.tool_proxy_url
+                    ) as client:
+                        if await check_url_status(name, client):
+                            continue
+                    seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"
+                    continue
+                elif name.startswith("MATH://"):
+                    code = name[7:]
+                    png = await convert_tex_to_png(code, session=session)
+                    if png:
+                        seg.data = V11Seg.image(file=png).data
+                    else:
+                        seg.type = "text"
+                        seg.data = {"text": f"${code}$"}
+                    continue
+                elif name.startswith("MARKDOWN://"):
+                    code = name[11:]
+                    if not p_config.markdown_server:
+                        seg.type = "text"
+                        seg.data = {"text": code}
+                        continue
+                    png = await convert_markdown_to_png(
+                        code, p_config.markdown_server, session=session
+                    )
+                    if png:
+                        seg.data = V11Seg.image(file=png).data
+                    else:
+                        seg.type = "text"
+                        seg.data = {"text": "```markdown\n" + code + "\n```"}
+                    continue
+                if not name.startswith("FOUND://"):
+                    continue
+                name = name[8:]
+                pic, _ = await randpic(name, f"qq_group:{event.group_id}", True)
+                if pic:
+                    if not isinstance(pic, dict):
+                        pic = {
+                            "url": getattr(pic, "url", ""),
+                            "name": getattr(pic, "name", ""),
+                            "group": getattr(pic, "group", ""),
+                        }
+                    seg.data["file"] = (
+                        pic["url"]
+                        if pic["url"].startswith("http")
+                        else pathlib.Path(pic["url"]).absolute().as_uri()
+                    )
                 else:
-                    seg.type = "text"
-                    seg.data = {"text": "```markdown\n" + code + "\n```"}
-                continue
-            if not name.startswith("FOUND://"):
-                continue
-            name = name[8:]
-            pic, _ = await randpic(name, f"qq_group:{event.group_id}", True)
-            if pic:
-                if not isinstance(pic, dict):
-                    pic = {
-                        "url": getattr(pic, "url", ""),
-                        "name": getattr(pic, "name", ""),
-                        "group": getattr(pic, "group", ""),
-                    }
-                seg.data["file"] = (
-                    pic["url"]
-                    if pic["url"].startswith("http")
-                    else pathlib.Path(pic["url"]).absolute().as_uri()
-                )
-            else:
-                seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"
+                    seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"
         return msg
 
     async for s in group.say():
