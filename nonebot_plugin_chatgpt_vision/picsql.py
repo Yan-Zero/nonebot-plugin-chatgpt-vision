@@ -1,8 +1,6 @@
-import aiohttp
-import json
+import httpx
 from nonebot import require
 from nonebot import get_plugin_config
-from urllib.parse import urljoin
 
 from .config import Config
 
@@ -21,7 +19,7 @@ else:
         name: str, group: str = "globe", vector: bool = False, **kwargs
     ) -> tuple[dict | None, str]:
         try:
-            async with aiohttp.ClientSession(
+            async with httpx.AsyncClient(
                 headers={
                     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36"
                 },
@@ -30,9 +28,9 @@ else:
                 rsp = await session.get(
                     f"https://www.doutupk.com/search?keyword={quote(name)}"
                 )
-                if rsp.status != 200:
+                if not rsp or rsp.status_code != 200:
                     return None, ""
-                soup = bs4.BeautifulSoup(await rsp.text(), "html.parser")
+                soup = bs4.BeautifulSoup(rsp.text, "html.parser")
                 rp = soup.find("div", class_="random_picture")
                 if not rp or not isinstance(rp, bs4.Tag):
                     return None, ""

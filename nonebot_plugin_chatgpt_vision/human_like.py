@@ -1,8 +1,8 @@
 import os
 import re
 import yaml
+import httpx
 import random
-import aiohttp
 import pathlib
 
 from nonebot import on_command, on_notice, on_message, logger
@@ -137,29 +137,20 @@ human_notion = on_notice(rule=Rule(human_like_on_notice))
 
 async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
     async def convert_image(msg: V11Msg) -> V11Msg:
-        async with aiohttp.ClientSession(proxy=p_config.tool_proxy_url) as session:
+        async with httpx.AsyncClient(proxy=p_config.tool_proxy_url) as client:
             for seg in msg:
                 if seg.type != "image":
                     continue
                 name = seg.data.get("file", "")
                 if name.startswith("http"):
-                    if name.startswith(
-                        (
-                            "https://multimedia.nt.qq.com.cn",
-                            "http://multimedia.nt.qq.com.cn",
-                        )
-                    ):
-                        seg.data["file"] = correct_tencent_image_url(name)
-                    async with aiohttp.ClientSession(
-                        proxy=p_config.tool_proxy_url
-                    ) as client:
-                        if await check_url_status(name, client):
-                            continue
+                    seg.data["file"] = correct_tencent_image_url(name)
+                    if await check_url_status(name, client):
+                        continue
                     seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"
                     continue
                 elif name.startswith("MATH://"):
                     code = name[7:]
-                    png = await convert_tex_to_png(code, session=session)
+                    png = await convert_tex_to_png(code, client=client)
                     if png:
                         seg.data = V11Seg.image(file=png).data
                     else:
@@ -173,7 +164,7 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                         seg.data = {"text": code}
                         continue
                     png = await convert_markdown_to_png(
-                        code, p_config.markdown_server, session=session
+                        code, p_config.markdown_server, client=client
                     )
                     if png:
                         seg.data = V11Seg.image(file=png).data
@@ -470,8 +461,6 @@ async def _(bot: Bot, event: Event):
         logger.error(ex)
         await reload_config.finish("加载主配置文件失败")
         return
-    if group_id in _CONFIG:
-        GROUP_RECORD[group_id] = GroupRecord(**_CONFIG.get(group_id, {}))
     try:
         with open(f"./data/human/{group_id}.yaml", "r", encoding="utf-8") as f:
             data: dict = yaml.load(f, yaml.UnsafeLoader)  # type: ignore

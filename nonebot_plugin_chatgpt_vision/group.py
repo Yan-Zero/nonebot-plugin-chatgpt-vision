@@ -1,7 +1,7 @@
 import json
 import yaml
+import httpx
 import random
-import aiohttp
 import asyncio
 
 from enum import Enum
@@ -250,22 +250,21 @@ class GroupRecord:
         self,
         record: RecordSeg,
     ):
-        async def _(url: str, session: aiohttp.ClientSession) -> str | None:
-            try:
-                if url.startswith("data:"):
-                    return url
-                return await download_image_to_base64(url, session)
-            except Exception as ex:
-                logger.warning(f"图片下载失败：{ex}")
+        async def _(url: str, client: httpx.AsyncClient) -> str | None:
+            if url.startswith("data:"):
+                return url
+            r = await download_image_to_base64(url, client)
+            if not r.startswith("data:"):
                 return None
+            return r
 
         if self.base64:
-            async with aiohttp.ClientSession(proxy=p_config.tool_proxy_url) as session:
+            async with httpx.AsyncClient(proxy=p_config.tool_proxy_url) as client:
                 record.images = list(
                     filter(
                         None,
                         await asyncio.gather(
-                            *[_(url, session) for url in record.images]
+                            *[_(url, client) for url in record.images]
                         ),
                     )
                 )
@@ -384,6 +383,7 @@ class GroupRecord:
                 content = ""
                 record_msg: list[tuple[str, str]] = []
                 should_record = False
+                now = datetime.now()
                 if getattr(choice.message, "content", None):
                     content = await asyncio.to_thread(
                         fix_xml,
@@ -410,9 +410,7 @@ class GroupRecord:
                         )
                     )
                 if should_record:
-                    record = RecordSeg(
-                        self.bot_name, self.bot_id, "", 0, datetime.now()
-                    )
+                    record = RecordSeg(self.bot_name, self.bot_id, "", 0, now)
                     record.msg = record_msg
                     await self.append(record)
 
@@ -432,13 +430,7 @@ class GroupRecord:
                         except Exception as ex:
                             result = f"工具调用失败：{ex}"
                         await self.append(
-                            RecordSeg(
-                                function_name,
-                                "tool",
-                                result,
-                                tool_call.id,
-                                datetime.now(),
-                            )
+                            RecordSeg(function_name, "tool", result, tool_call.id, now)
                         )
                         return (
                             f"<p><code lang=\"markdown\"><![CDATA[# {function_name.replace(']]>', ']]]]><![CDATA[>')}\n"

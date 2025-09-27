@@ -1,6 +1,6 @@
 import yaml
 import bisect
-import aiohttp
+import httpx
 import asyncio
 
 from lxml import etree  # type: ignore
@@ -356,20 +356,20 @@ class RecordList:
         移除所有无法访问的图片，并且给rkey参数添加最新的值
         """
 
-        async def _(r: RecordSeg, client: aiohttp.ClientSession):
+        async def _(r: RecordSeg, client: httpx.AsyncClient):
             r.images = list(
                 filter(
                     None,
                     await asyncio.gather(
                         *map(
-                            partial(check_url_status, session=client),
+                            partial(check_url_status, client=client),
                             map(correct_tencent_image_url, r.images),
                         )
                     ),
                 )
             )
 
-        async with aiohttp.ClientSession(proxy=p_config.tool_proxy_url) as client:
+        async with httpx.AsyncClient(proxy=p_config.tool_proxy_url) as client:
             await asyncio.gather(*map(partial(_, client=client), self.records))
 
 

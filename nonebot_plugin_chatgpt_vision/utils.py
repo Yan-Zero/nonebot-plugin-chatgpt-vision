@@ -3,12 +3,11 @@ import re
 import json
 import httpx
 import base64
-import aiohttp
 import pathlib
 import cairosvg
 
 from PIL import Image
-from lxml import etree  # type: ignore
+from lxml import etree
 from typing import List
 from nonebot import logger
 from datetime import datetime, timedelta
@@ -73,59 +72,56 @@ async def convert_gif_to_png_base64(url: str) -> str:
         如果是GIF则返回转换后的base64 data URL，否则返回原URL
     """
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    return url
-
-                # 只读取前6个字节判断是否为GIF
-                header = await response.content.read(6)
-                if len(header) < 6 or header[:3] != b"GIF":
-                    return url
-
-                # 确认是GIF后，重新请求完整内容
-                async with session.get(url) as full_response:
-                    if full_response.status != 200:
-                        return url
-
-                    content = await full_response.read()
-
-                    # 转换为PNG
-                    with Image.open(io.BytesIO(content)) as img:
-                        # 转换为RGBA模式并取第一帧
-                        img = img.convert("RGBA")
-
-                        # 保存为PNG格式
-                        output = io.BytesIO()
-                        img.save(output, format="PNG")
-                        output.seek(0)
-
-                        # 转换为base64
-                        png_data = output.getvalue()
-                        base64_data = base64.b64encode(png_data).decode("utf-8")
-
-                        return f"data:image/png;base64,{base64_data}"
+        async with (
+            httpx.AsyncClient(proxy=p_config.tool_proxy_url, timeout=10) as client,
+            client.stream("GET", url) as response,
+        ):
+            response.raise_for_status()
+            buffer = bytearray()
+            async for chunk in response.aiter_bytes():
+                buffer.extend(chunk)
+                if len(buffer) >= 6:
+                    break
+            if len(buffer) < 6 or buffer[:3] != b"GIF":
+                return url
+            async for chunk in response.aiter_bytes():
+                buffer.extend(chunk)
+            content = bytes(buffer)
+        with Image.open(io.BytesIO(content)) as img:
+            img = img.convert("RGBA")
+            output = io.BytesIO()
+            img.save(output, format="PNG")
+            output.seek(0)
+            png_data = output.getvalue()
+            base64_data = base64.b64encode(png_data).decode("utf-8")
+            return f"data:image/png;base64,{base64_data}"
 
     except Exception as e:
-        from nonebot import logger
-
         logger.error(f"GIF转PNG失败: {e}")
         return url
 
     return url
 
 
-async def check_url_status(url: str, session: aiohttp.ClientSession) -> str | None:
+async def check_url_status(url: str, client: httpx.AsyncClient) -> str | None:
     try:
-        async with session.get(url, timeout=aiohttp.ClientTimeout(5)) as response:
-            if response.status == 200:
+        async with client.stream("GET", url, timeout=5) as response:
+            if response.status_code == 200:
                 return url
-            logger.warning(f"Image URL {url} returned status {response.status}")
-    except Exception:
-        pass
+            if response.status_code != 405:
+                logger.warning(
+                    f"Image URL {url} returned status {response.status_code}"
+                )
+                return None
+        r = await client.head(url, timeout=5)
+        r.raise_for_status()
+        return url
+    except Exception as e:
+        logger.error(f"检查图片URL状态失败: {e}")
+        return None
 
 
-async def download_image_to_base64(url: str, session: aiohttp.ClientSession) -> str:
+async def download_image_to_base64(url: str, client: httpx.AsyncClient) -> str:
     """
     下载图片并转换为base64编码的data URL
 
@@ -136,62 +132,46 @@ async def download_image_to_base64(url: str, session: aiohttp.ClientSession) -> 
         base64编码的data URL
     """
     try:
-        async with session.get(url) as response:
-            if response.status != 200:
-                return url
-
-            content = await response.read()
-
-            # 转换为base64
-            base64_data = base64.b64encode(content).decode("utf-8")
-
-            # 尝试获取图片格式
-            content_type = response.headers.get("Content-Type", "image/png")
-            return f"data:{content_type};base64,{base64_data}"
-
+        resp = await client.get(url, timeout=10)
+        resp.raise_for_status()
+        content_type = resp.headers.get("Content-Type", "image/png")
+        base64_data = base64.b64encode(resp.content).decode("utf-8")
+        return f"data:{content_type};base64,{base64_data}"
     except Exception as e:
-        from nonebot import logger
-
         logger.error(f"图片下载失败: {e}")
-        return url
-
     return url
 
 
-async def convert_tex_to_png(tex: str, session: aiohttp.ClientSession) -> bytes | None:
+async def convert_tex_to_png(tex: str, client: httpx.AsyncClient) -> bytes | None:
     try:
-        async with session.get(
-            "https://www.zhihu.com/equation?tex=" + quote_plus(tex)
-        ) as response:
-            if response.status != 200:
-                return None
-            svg_content = await response.text()
-            png_data = cairosvg.svg2png(
-                bytestring=svg_content.encode("utf-8"),
-                scale=2,
-                background_color="#FFFBE6",  # 淡黄色（可换成你想要的 CSS 颜色）
-            )
-            return png_data
+        resp = await client.get(
+            "https://www.zhihu.com/equation?tex=" + quote_plus(tex), timeout=10
+        )  # or "https://math.now.sh?from=" + quote_plus(tex)
+        resp.raise_for_status()
+        png_data = cairosvg.svg2png(
+            bytestring=resp.text.encode("utf-8"),
+            scale=2,
+            background_color="#FFFBE6",
+        )
+        return png_data
     except Exception as e:
         logger.error(f"公式渲染失败: {e}")
         return None
 
 
 async def convert_markdown_to_png(
-    markdown: str, url: str, session: aiohttp.ClientSession
+    markdown: str, url: str, client: httpx.AsyncClient
 ) -> bytes | None:
     try:
-        async with session.post(
+        resp = await client.post(
             url,
-            data=markdown.encode("utf-8"),
-        ) as response:
-            if response.status != 200:
-                return None
-            png_data = await response.read()
-            return png_data
+            content=markdown.encode("utf-8"),
+            headers={"Content-Type": "text/markdown"},
+        )
+        resp.raise_for_status()
+        return resp.content
     except Exception as e:
         logger.error(f"Markdown渲染失败: {e}")
-        return None
 
 
 def fix_xml(xml: str, convert_face_to_image=True) -> str:
