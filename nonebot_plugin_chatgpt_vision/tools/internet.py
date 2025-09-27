@@ -8,6 +8,7 @@ from charset_normalizer import from_bytes
 
 from . import Tool
 from ..chat import chat
+from ..utils import correct_tencent_image_url
 
 
 async def fetch_url(
@@ -131,11 +132,11 @@ class SearchTool(Tool):
                     "type": "object",
                     "properties": {
                         "query": {"type": "string", "description": "搜索查询内容"},
-                        "include_content": {
-                            "type": "boolean",
-                            "description": "是否在搜索结果中包含网页内容的全文。默认为 True。",
-                            "default": True,
-                        },
+                        # "include_content": {
+                        #     "type": "boolean",
+                        #     "description": "是否在搜索结果中包含网页内容的全文。默认为 True。",
+                        #     "default": True,
+                        # },
                         "max_results": {
                             "type": "number",
                             "description": "返回的最大结果数，默认为3",
@@ -146,6 +147,12 @@ class SearchTool(Tool):
                             "description": "附加信息，用自然语言描述，用以改进搜索方向、Snippets的侧重点等。默认为空。",
                             "default": "",
                         },
+                        "images": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": "与搜索查询相关的图片URL列表。默认值为空列表。",
+                            "default": [],
+                        },
                     },
                     "required": ["query"],
                 },
@@ -155,14 +162,15 @@ class SearchTool(Tool):
     async def execute(
         self,
         query: str,
+        images: list[str] = [],
         max_results: int = 3,
         addition: str = "",
         include_content: bool = True,
     ) -> str:
-        message = [
+        content: list[dict[str, Any]] = [
             {
-                "role": "user",
-                "content": f"""帮我搜索如下内容：
+                "type": "text",
+                "text": f"""帮我搜索如下内容：
 ```
 {query}
 ```
@@ -175,7 +183,7 @@ class SearchTool(Tool):
 
 请使用yaml格式返回搜索结果，格式如下：
 ```yaml
-overview: <对搜索结果的简要总结，300字以内>
+overview: <对搜索结果的简要总结，300字左右>
 results:
   - title: <结果标题>
     link: <结果链接>
@@ -185,6 +193,21 @@ results:
     snippet: <结果摘要，200字左右>
   ...  最多返回 {max_results} 条结果。
 ```""",
+            }
+        ]
+        for img in images:
+            content.append(
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": correct_tencent_image_url(img),
+                    },
+                }
+            )
+        message = [
+            {
+                "role": "user",
+                "content": content,
             }
         ]
         try:

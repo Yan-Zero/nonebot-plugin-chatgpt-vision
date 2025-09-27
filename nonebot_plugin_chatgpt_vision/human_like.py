@@ -283,24 +283,24 @@ async def _(bot: V11Bot, event: V11G, state):
             images=imgs,
         )
     msg = event.message
+    is_to_me = await to_me()(bot=bot, event=event, state=state)
+    if is_to_me and not msg.to_rich_text().strip():
+        msg += V11Seg.at(group.bot_id)
+
+    plain_text = msg.extract_plain_text()
 
     if re.search(
         r"((提示词|系统提示|开发者提示|隐藏规则|内部指令|系统消息|主人).{0,12}(复述|重复|说出|打印|展示|公开|泄露))|"
         r"((复述|重复|说出|打印|展示|公开|泄露).{0,12}(提示词|系统提示|开发者提示|隐藏规则|内部指令|系统消息|主人))|"
         r"((show|print|reveal|repeat).{0,20}(prompt|system message|dev prompt|instructions))|"
         r"(忽略之前.*指令/规则)|(you are now (admin|system))",
-        msg.extract_plain_text(),
+        plain_text,
     ) and re.search(
         r"(</message>|</system>|</instructions>|</dev_prompt>|</p>)",
-        msg.extract_plain_text(),
+        plain_text,
     ):
         return
 
-    if (
-        await to_me()(bot=bot, event=event, state=state)
-        and not msg.to_rich_text().strip()
-    ):
-        msg += V11Seg.at(group.bot_id)
     if group.check(uid, datetime.now()):
         return
     if not msg.to_rich_text().strip():
@@ -322,21 +322,20 @@ async def _(bot: V11Bot, event: V11G, state):
         return
     if group.last_time + group.cd > datetime.now():
         return True
-    if msg.extract_plain_text().startswith("/"):
+    if plain_text.startswith("/"):
         return
 
     group.rest -= 1
+    is_superuser = await SUPERUSER(bot, event)
     if group.rest > 0:
-        if not await to_me()(bot=bot, event=event, state=state):
-            if group.bot_name not in msg.extract_plain_text():
-                return
-            if random.random() < 0.7:
-                return
-        if random.random() < 0.02 and not await SUPERUSER(bot, event):
+        mentioned = group.bot_name in plain_text
+        if (not is_to_me and (not mentioned or random.random() < 0.7)) or (
+            random.random() < 0.02 and not is_superuser
+        ):
             return
     group.rest = random.randint(group.min_rest, group.max_rest)
     group.last_time = datetime.now()
-    if await SUPERUSER(bot, event):
+    if is_superuser:
         group.next_model = group.model
 
     try:
