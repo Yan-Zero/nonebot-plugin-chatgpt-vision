@@ -258,11 +258,11 @@ async def save_group_record(group_id: str):
 @humanlike.handle()
 async def _(bot: V11Bot, event: V11G, state):
     uid = event.get_user_id()
-    user_name = event.sender.nickname
+    user_name = (
+        await bot.get_group_member_info(group_id=event.group_id, user_id=int(uid))
+    ).get("nickname", "")
     if not user_name or not user_name.strip():
         user_name = str(event.sender.user_id)[:5]
-
-    user_name = user_name.replace("，", ",").replace("。", ".")
     group: GroupRecord = GROUP_RECORD[str(event.group_id)]
 
     reply = None
@@ -280,8 +280,8 @@ async def _(bot: V11Bot, event: V11G, state):
         )
     msg = event.message
     is_to_me = await to_me()(bot=bot, event=event, state=state)
-    if is_to_me and not msg.to_rich_text().strip():
-        msg += V11Seg.at(group.bot_id)
+    if is_to_me and not msg.count(V11Seg.at(bot.self_id)):
+        msg = V11Seg.at(group.bot_id) + V11Seg.text(" ") + msg
 
     plain_text = msg.extract_plain_text()
 

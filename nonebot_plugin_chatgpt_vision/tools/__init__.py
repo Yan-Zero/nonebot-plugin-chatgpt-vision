@@ -22,7 +22,7 @@ class Tool(ABC):
         pass
 
     @abstractmethod
-    async def execute(self, **kwargs) -> str:
+    async def execute(self, **kwargs) -> str | list[dict[str, Any]]:
         """执行工具"""
         pass
 
@@ -80,7 +80,7 @@ class ToolManager:
             if self.enable.get(name, False)
         ]
 
-    async def execute_tool(self, name: str, **kwargs) -> str:
+    async def execute_tool(self, name: str, **kwargs) -> str | list[dict[str, Any]]:
         if not self.enable.get(name, False):
             logger.warning(f"Tool {name} is disabled")
             return f"工具 {name} 未启用"
@@ -263,51 +263,83 @@ class MCPTool(Tool):
         return {"type": "function", "function": self.tool_schema}
 
     @staticmethod
-    def _stringify_mcp_result(result: Any) -> str:
+    def _stringify_mcp_result(result: Any) -> str | list[dict[str, Any]]:
         # mcp[cli] 返回的 call_tool 结果通常带有 content 列表
         try:
             # 0) dict 形式且包含 content
             if isinstance(result, dict) and "content" in result:
-                parts: list[str] = []
-                content = result.get("content")
-                if isinstance(content, list):
-                    for p in content:
-                        text = None
-                        if isinstance(p, dict):
-                            text = p.get("text")
-                        if text is not None:
-                            parts.append(str(text))
-                        else:
-                            parts.append(json.dumps(p, ensure_ascii=False, default=str))
-                return "\n".join(parts).strip() or json.dumps(
-                    result, ensure_ascii=False, default=str
-                )
-
+                # return result["content"]
+                ret = []
+                for block in result["content"]:
+                    if not isinstance(block, dict) or "type" not in block:
+                        ret.append({"type": "text", "text": str(block)})
+                        continue
+                    if block["type"] == "text":
+                        ret.append({"type": "text", "text": str(block.get("text", ""))})
+                    elif block["type"] == "image":
+                        base64_data = block.get("data", "")
+                        mimeType = block.get("mimeType", "image/png")
+                        if base64_data:
+                            ret.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{mimeType};base64,{base64_data}"
+                                    },
+                                }
+                            )
+                    else:
+                        ret.append(
+                            {
+                                "type": "text",
+                                "text": json.dumps(
+                                    block, ensure_ascii=False, default=str
+                                ),
+                            }
+                        )
+                return ret
             # 1) 结果对象形式（如 dataclass，带 content 属性）
             content = getattr(result, "content", None)
             if content is not None:
-                parts: list[str] = []
-                for p in content:
-                    # p 可能是对象或 dict
-                    text = getattr(p, "text", None)
-                    if text is None and isinstance(p, dict):
-                        text = p.get("text")
-                    if text is not None:
-                        parts.append(str(text))
+                if not isinstance(content, list):
+                    return str(content)
+                ret = []
+                for block in content:
+                    type = getattr(block, "type", None)
+                    if not type:
+                        ret.append({"type": "text", "text": str(block)})
+                        continue
+                    if type == "text":
+                        text = getattr(block, "text", "")
+                        ret.append({"type": "text", "text": str(text)})
+                    elif type == "image":
+                        base64_data = getattr(block, "data", "")
+                        mimeType = getattr(block, "mimeType", "image/png")
+                        if base64_data:
+                            ret.append(
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{mimeType};base64,{base64_data}"
+                                    },
+                                }
+                            )
                     else:
-                        parts.append(json.dumps(p, ensure_ascii=False, default=str))
-                return "\n".join(parts).strip() or str(result)
-
-            # 2) dict/list 等可序列化结构
-            if isinstance(result, (dict, list)):
-                return json.dumps(result, ensure_ascii=False, default=str)
-
+                        ret.append(
+                            {
+                                "type": "text",
+                                "text": json.dumps(
+                                    block, ensure_ascii=False, default=str
+                                ),
+                            }
+                        )
+                return ret
             # 3) 兜底
             return str(result)
         except Exception:
             return str(result)
 
-    async def execute(self, **kwargs) -> str:
+    async def execute(self, **kwargs) -> str | list[dict[str, Any]]:
         # 调用 MCP 服务器
         result = await self.mcp_client.call_tool(self.tool_name, kwargs)
         return self._stringify_mcp_result(result)

@@ -108,7 +108,39 @@ class FetchUrlTool(Tool):
 
     async def execute(
         self, url: str, start_index: int = 0, max_length: int = 5000, raw: bool = False
-    ) -> str:
+    ) -> str | list[dict[str, Any]]:
+        # 获取 url 内容的类型，如果是 pdf 等非文本类型，直接返回链接
+        if not url.startswith("http"):
+            return f"Invalid URL: {url}"
+        async with (
+            AsyncClient(proxy=p_config.tool_proxy_url) as client,
+            client.stream(
+                "GET", url, headers={"User-Agent": self.user_agent}, timeout=10
+            ) as response,
+        ):
+            content_type = response.headers.get("Content-Type", "")
+            if "application/pdf" in content_type:
+                return [
+                    {
+                        "image_url": {"url": url},
+                        "type": "image_url",
+                    }
+                ]
+            # 如果是 png, webp, jpeg 等图片，直接返回图片链接
+            if any(
+                x in content_type for x in ["image/png", "image/jpeg", "image/webp"]
+            ):
+                return [
+                    {
+                        "image_url": {"url": url},
+                        "type": "image_url",
+                    }
+                ]
+            # 如果是gif，返回不支持查看动图
+            if "image/gif" in content_type:
+                return (
+                    f"Fetched a GIF image from {url}, but GIF images are not supported."
+                )
         try:
             content, prefix = await fetch_url(url, self.user_agent, force_raw=raw)
             if len(content) > start_index + max_length:

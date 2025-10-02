@@ -138,7 +138,7 @@ class RecordSeg:
         self,
         name: str,
         uid: str,
-        msg: str,
+        msg: str | list,
         msg_id: str | int,
         time: datetime,
         images: list[str] = [],
@@ -294,7 +294,7 @@ class RecordList:
                         "role": "tool",
                         "name": record.name,
                         "content": content,
-                        "tool_call_id": id,
+                        # "id": id,
                     }
                 )
                 continue

@@ -398,12 +398,25 @@ class GroupRecord:
                 # 检查是否有工具调用
                 if getattr(choice.message, "tool_calls", None):
                     should_record = True
+                    # 删除 tool_calls 里的 tool id
+                    tool_calls = choice.message.model_dump()["tool_calls"]
+                    tool_calls = [
+                        {
+                            "function": {
+                                "name": tc["function"]["name"],
+                                "arguments": tc["function"]["arguments"],
+                            },
+                            # "id": tc.id, --- IGNORE ---
+                            "type": tc["type"],
+                        }
+                        for tc in tool_calls
+                    ]
                     record_msg.append(
                         (
                             "tool_calls",
                             str(
                                 yaml.safe_dump(
-                                    choice.message.model_dump()["tool_calls"],
+                                    tool_calls,
                                     allow_unicode=True,
                                 )
                             ),
@@ -440,7 +453,7 @@ class GroupRecord:
                             "```\n"
                             "## 调用结果\n"
                             "```\n"
-                            f"{result.replace(']]>', ']]]]><![CDATA[>')}\n"
+                            f"{str(result).replace(']]>', ']]]]><![CDATA[>')}\n"
                             "```]]></code></p>"
                         )
 

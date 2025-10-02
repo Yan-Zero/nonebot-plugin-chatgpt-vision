@@ -78,13 +78,14 @@ async def convert_gif_to_png_base64(url: str) -> str:
         ):
             response.raise_for_status()
             buffer = bytearray()
-            async for chunk in response.aiter_bytes():
+            aiter = response.aiter_bytes()
+            async for chunk in aiter:
                 buffer.extend(chunk)
                 if len(buffer) >= 6:
                     break
-            if len(buffer) < 6 or buffer[:3] != b"GIF":
+            if not buffer.startswith(b"GIF"):
                 return url
-            async for chunk in response.aiter_bytes():
+            async for chunk in aiter:
                 buffer.extend(chunk)
             content = bytes(buffer)
         with Image.open(io.BytesIO(content)) as img:
@@ -104,6 +105,8 @@ async def convert_gif_to_png_base64(url: str) -> str:
 
 
 async def check_url_status(url: str, client: httpx.AsyncClient) -> str | None:
+    if url.startswith("data:"):
+        return url
     try:
         async with client.stream("GET", url, timeout=5) as response:
             if response.status_code == 200:
