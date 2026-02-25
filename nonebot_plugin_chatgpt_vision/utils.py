@@ -8,7 +8,6 @@ import cairosvg
 
 from PIL import Image
 from lxml import etree
-from typing import List
 from nonebot import logger
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus, urlparse, parse_qs, urlencode, urlunparse
@@ -216,19 +215,19 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
             return x.decode("utf-8", errors="ignore")
         return str(x)
 
-    class _Target(etree.ParserTarget):
+    class _Target:
         def __init__(self):
-            self.out_ps: List[str] = []
-            self.cur: List[str] = []
-            self.outside: List[str] = []
+            self.out_ps: list[str] = []
+            self.cur: list[str] = []
+            self.outside: list[str] = []
             self.p_depth: int = 0
             self.in_code: bool = False
             self.code_lang: str = "text"
-            self.code_buf: List[str] = []
-            self.skip_stack: List[str] = []
+            self.code_buf: list[str] = []
+            self.skip_stack: list[str] = []
             self.reply_seen_in_p: bool = False
             self.in_tex: bool = False
-            self.tex_buf: List[str] = []
+            self.tex_buf: list[str] = []
 
         def _append_text(self, s: str):
             if not s:
@@ -532,4 +531,4 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
     parser.feed("<root>")
     parser.feed(xml)
     parser.feed("</root>")
-    return etree.tostring(parser.close(), encoding="unicode", method="xml")
+    return parser.close()  # type: ignore

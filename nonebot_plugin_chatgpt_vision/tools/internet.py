@@ -30,12 +30,10 @@ async def fetch_url(
         rsp.raise_for_status()
         content_type = rsp.headers.get("Content-Type", "")
         if not rsp.encoding or rsp.encoding == "ISO-8859-1":
-            # 尝试从内容中检测编码
             detected = from_bytes(rsp.content).best()
             if detected and detected.encoding:
                 rsp.encoding = detected.encoding
-        else:
-            downloaded = rsp.text
+        downloaded = rsp.text
     is_page_html = (
         "<html" in downloaded[:100] or "text/html" in content_type or not content_type
     )
@@ -106,9 +104,11 @@ class FetchUrlTool(Tool):
             },
         }
 
-    async def execute(
-        self, url: str, start_index: int = 0, max_length: int = 5000, raw: bool = False
-    ) -> str | list[dict[str, Any]]:
+    async def execute(self, **kwargs) -> str | list[dict[str, Any]]:
+        url = str(kwargs.get("url", ""))
+        start_index = kwargs.get("start_index", 0)
+        max_length = kwargs.get("max_length", 5000)
+        raw = kwargs.get("raw", False)
         # 获取 url 内容的类型，如果是 pdf 等非文本类型，直接返回链接
         if not url.startswith("http"):
             return f"Invalid URL: {url}"
@@ -192,14 +192,12 @@ class SearchTool(Tool):
             },
         }
 
-    async def execute(
-        self,
-        query: str,
-        images: list[str] = [],
-        max_results: int = 3,
-        addition: str = "",
-        include_content: bool = True,
-    ) -> str:
+    async def execute(self, **kwargs) -> str:
+        query = kwargs.get("query")
+        images = kwargs.get("images", [])
+        max_results = kwargs.get("max_results", 3)
+        addition = kwargs.get("addition", "")
+        include_content = kwargs.get("include_content", True)
         content: list[dict[str, Any]] = [
             {
                 "type": "text",

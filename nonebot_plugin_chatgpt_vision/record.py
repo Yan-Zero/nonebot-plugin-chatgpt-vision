@@ -3,7 +3,7 @@ import bisect
 import httpx
 import asyncio
 
-from lxml import etree  # type: ignore
+from lxml import etree
 from typing import Any, Optional
 from nonebot import logger
 from datetime import datetime
@@ -21,9 +21,7 @@ from .utils import (
 from .config import p_config
 
 
-async def v11msg_to_xml_async(
-    msg: V11Msg, msg_id: Optional[str]
-) -> tuple[str, list[str]]:
+async def v11msg_to_xml_async(msg: V11Msg, msg_id: str | None) -> tuple[str, list[str]]:
 
     # 用于把顺序文本正确放入 parent.text / last_child.tail
     def _append_text(parent: etree._Element, text: str):
@@ -75,7 +73,7 @@ async def v11msg_to_xml_async(
 
         elif st == "face":
             # <face name="..." id="..."/>
-            face_id = data.get("id")
+            face_id = str(data.get("id", ""))
             name = QFACE.get(face_id, f"表情{face_id}")
             face = etree.SubElement(p, "face")
             face.set("name", name)
@@ -83,7 +81,7 @@ async def v11msg_to_xml_async(
 
         elif st == "image":
             # <image name="..."/> 或 <image url="..."/>
-            file_ = data.get("file")
+            file_ = data.get("url")
             image = etree.SubElement(p, "image")
             if file_:
                 url = await convert_gif_to_png_base64(correct_tencent_image_url(file_))

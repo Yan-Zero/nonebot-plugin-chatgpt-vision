@@ -199,6 +199,8 @@ def load_mcp_clients_from_yaml(
         commands: list[str] = stdio_cfg.get("commands") or []
     elif isinstance(stdio_cfg, list):
         commands: list[str] = stdio_cfg
+    else:
+        commands: list[str] = []
 
     if isinstance(commands, str):
         commands = [commands]

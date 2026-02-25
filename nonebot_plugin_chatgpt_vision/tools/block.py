@@ -26,7 +26,9 @@ class BlockTool(Tool):
             },
         }
 
-    async def execute(self, user_id: str, duration: float) -> str:
+    async def execute(self, **kwargs) -> str:
+        user_id = kwargs.get("user_id")
+        duration = kwargs.get("duration")
         duration = self.group_record.block(user_id, duration)
         if duration <= 0:
             return f"已取消屏蔽用户 {user_id}"
@@ -87,6 +89,8 @@ class BanUser(Tool):
             },
         }
 
-    async def execute(self, user_id: str, duration: float) -> str:
+    async def execute(self, **kwargs) -> str:
+        user_id = kwargs.get("user_id")
+        duration = kwargs.get("duration")
         self.group_record.ban(user_id, duration)
         return f"User {user_id} has been banned for {duration} seconds"

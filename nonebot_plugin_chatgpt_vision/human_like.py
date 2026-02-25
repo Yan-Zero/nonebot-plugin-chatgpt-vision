@@ -279,10 +279,10 @@ async def _(bot: V11Bot, event: V11G, state):
             images=imgs,
         )
     msg = event.message
+    is_command = msg.extract_plain_text().startswith("/")
     is_to_me = await to_me()(bot=bot, event=event, state=state)
     if is_to_me and not msg.count(V11Seg.at(bot.self_id)):
         msg = V11Seg.at(group.bot_id) + V11Seg.text(" ") + msg
-
     plain_text = msg.extract_plain_text()
 
     if re.search(
@@ -296,10 +296,11 @@ async def _(bot: V11Bot, event: V11G, state):
         plain_text,
     ):
         return
-
     if group.check(uid, datetime.now()):
         return
     if not msg.to_rich_text().strip():
+        return
+    if is_command:
         return
 
     _msg, imgs = await v11msg_to_xml_async(msg, str(event.message_id))
