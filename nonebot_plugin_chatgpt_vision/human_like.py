@@ -186,7 +186,7 @@ async def say(group: GroupRecord, event, bot: Bot, matcher: type[Matcher]):
                     seg.data["file"] = (
                         pic["url"]
                         if pic["url"].startswith("http")
-                        else pathlib.Path(pic["url"]).absolute().as_uri()
+                        else pathlib.Path(pic["url"]).resolve().as_uri()
                     )
                 else:
                     seg.data["file"] = "https://demofree.sirv.com/nope-not-here.jpg"

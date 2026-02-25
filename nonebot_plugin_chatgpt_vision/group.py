@@ -48,7 +48,7 @@ class GroupRecord:
     image_mode: int = 0
     todo_ops: list[tuple[SpecialOperation, Any]]
     default_tools: list[str] = []
-    mcp_config: Optional[str | dict] = None
+    mcp_config: str | dict | None = None
     base64: bool = False
     """是否使用 base64 传输图片，默认否"""
 
@@ -56,6 +56,7 @@ class GroupRecord:
     """显示工具调用的结果"""
 
     lock: asyncio.Lock
+    include_tool_id: bool = False
     mcp_loaded: bool = False
     tool_manager: ToolManager
 
@@ -74,6 +75,7 @@ class GroupRecord:
         model: Optional[str] = None,
         default_tools: Optional[list[str]] = None,
         mcp_config: Optional[str | dict] = None,
+        include_tool_id: bool = False,
         **kwargs,
     ):
         self.todo_ops = []
@@ -120,6 +122,7 @@ class GroupRecord:
 
         self.tool_manager = ToolManager()
         self._setup_tools()
+        self.include_tool_id = include_tool_id
 
     def _setup_tools(self):
         """设置工具（本地+搜索器），MCP 工具首次调用前懒加载"""
@@ -197,7 +200,7 @@ class GroupRecord:
 
     def set(
         self,
-        bot_name: Optional[str] = None,
+        bot_name: str | None = None,
         bot_id: Optional[str] = None,
         system_prompt: Optional[str] = None,
         model: Optional[str] = None,
@@ -398,7 +401,6 @@ class GroupRecord:
                 # 检查是否有工具调用
                 if getattr(choice.message, "tool_calls", None):
                     should_record = True
-                    # 删除 tool_calls 里的 tool id
                     tool_calls = choice.message.model_dump()["tool_calls"]
                     tool_calls = [
                         {
@@ -406,7 +408,7 @@ class GroupRecord:
                                 "name": tc["function"]["name"],
                                 "arguments": tc["function"]["arguments"],
                             },
-                            # "id": tc.id, --- IGNORE ---
+                            "id": tc.get("id", None) if self.include_tool_id else None,
                             "type": tc["type"],
                         }
                         for tc in tool_calls

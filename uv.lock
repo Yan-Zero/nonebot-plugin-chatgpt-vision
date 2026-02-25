@@ -1017,6 +1017,15 @@ wheels = [
 ]
 
 [[package]]
+name = "lxml-stubs"
+version = "0.5.1"
+source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
+sdist = { url = "https://pypi.tuna.tsinghua.edu.cn/packages/99/da/1a3a3e5d159b249fc2970d73437496b908de8e4716a089c69591b4ffa6fd/lxml-stubs-0.5.1.tar.gz", hash = "sha256:e0ec2aa1ce92d91278b719091ce4515c12adc1d564359dfaf81efa7d4feab79d", size = 14778, upload-time = "2024-01-10T09:37:46.521Z" }
+wheels = [
+    { url = "https://pypi.tuna.tsinghua.edu.cn/packages/1f/c9/e0f8e4e6e8a69e5959b06499582dca6349db6769cc7fdfb8a02a7c75a9ae/lxml_stubs-0.5.1-py3-none-any.whl", hash = "sha256:1f689e5dbc4b9247cb09ae820c7d34daeb1fdbd1db06123814b856dae7787272", size = 13584, upload-time = "2024-01-10T09:37:44.931Z" },
+]
+
+[[package]]
 name = "markdown-it-py"
 version = "4.0.0"
 source = { registry = "https://pypi.tuna.tsinghua.edu.cn/simple" }
@@ -1252,7 +1261,7 @@ wheels = [
 
 [[package]]
 name = "nonebot-plugin-chatgpt-vision"
-version = "1.3.1"
+version = "1.3.2"
 source = { editable = "." }
 dependencies = [
     { name = "async-tio" },
@@ -1262,6 +1271,7 @@ dependencies = [
     { name = "fastmcp" },
     { name = "httpx", extra = ["socks"] },
     { name = "lxml" },
+    { name = "lxml-stubs" },
     { name = "nonebot-adapter-onebot" },
     { name = "nonebot2" },
     { name = "openai" },
@@ -1280,6 +1290,7 @@ requires-dist = [
     { name = "fastmcp", specifier = ">=2.12.3,<3.0.0" },
     { name = "httpx", extras = ["socks"], specifier = ">=0.28.1" },
     { name = "lxml", specifier = ">=6.0.1,<7.0.0" },
+    { name = "lxml-stubs", specifier = ">=0.5.1" },
     { name = "nonebot-adapter-onebot", specifier = ">=2.4.3,<3.0.0" },
     { name = "nonebot2", specifier = ">=2.4.0,<3.0.0" },
     { name = "openai", specifier = ">=1.30.1,<2.0.0" },

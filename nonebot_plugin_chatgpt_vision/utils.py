@@ -209,7 +209,14 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
             return True
         return bool(_VISIBLE_TAGS_RE.search(fragment))
 
-    class _Target:
+    def _str(x: str | bytes) -> str:
+        if isinstance(x, str):
+            return x
+        if isinstance(x, bytes):
+            return x.decode("utf-8", errors="ignore")
+        return str(x)
+
+    class _Target(etree.ParserTarget):
         def __init__(self):
             self.out_ps: List[str] = []
             self.cur: List[str] = []
@@ -338,22 +345,23 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 self.out_ps.append("<p>" + fragment + "</p>")
             self.outside.clear()
 
-        def start(self, tag: str, attrs: dict):
+        def start(self, tag, attrib):
+            tag = _str(tag)
             if tag == "root":
                 return
 
             # 在 code/tex 模式下，任何标签都按字面写入缓冲
             if self.in_code:
                 frag = "<" + tag
-                for k, v in (attrs or {}).items():
-                    frag += f" {k}={_xml_q(v)}"
+                for k, v in (attrib or {}).items():
+                    frag += f" {k}={_xml_q(_str(v))}"
                 frag += ">"
                 self.code_buf.append(frag)
                 return
             if self.in_tex:
                 frag = "<" + tag
-                for k, v in (attrs or {}).items():
-                    frag += f" {k}={_xml_q(v)}"
+                for k, v in (attrib or {}).items():
+                    frag += f" {k}={_xml_q(_str(v))}"
                 frag += ">"
                 self.tex_buf.append(frag)
                 return
@@ -363,7 +371,7 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 return
 
             if tag in VOID:
-                frag = self._emit_void(tag, attrs or {})
+                frag = self._emit_void(tag, attrib or {})
                 if not frag:
                     self.skip_stack.append(tag)
                     return
@@ -385,7 +393,7 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
 
             if tag == "code":
                 self.in_code = True
-                self.code_lang = (attrs or {}).get("lang", "text") or "text"
+                self.code_lang = _str((attrib or {}).get("lang", "text")) or "text"
                 self.code_buf.clear()
                 self.skip_stack.append("code")
                 return
@@ -408,8 +416,8 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
 
             self.skip_stack.append("")
 
-        def data(self, text: str):
-            if not text:
+        def data(self, data):
+            if not data:
                 return
             if (
                 (not self.in_code)
@@ -418,12 +426,12 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 and self.skip_stack[-1] in (IGNORE | VOID | {"code"})
             ):
                 return
-            self._append_text(text)
+            self._append_text(_str(data))
 
-        def end(self, tag: str):
+        def end(self, tag):
+            tag = _str(tag)
             if tag == "root":
                 return
-
             if self.in_code:
                 if tag == "code":
                     if self.skip_stack and self.skip_stack[-1] == "code":
@@ -478,7 +486,7 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                 return
             # 其它未知标签：无操作
 
-        def comment(self, text: str):
+        def comment(self, text):
             return
 
         def close(self) -> str:
@@ -524,4 +532,4 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
     parser.feed("<root>")
     parser.feed(xml)
     parser.feed("</root>")
-    return parser.close()
+    return etree.tostring(parser.close(), encoding="unicode", method="xml")
