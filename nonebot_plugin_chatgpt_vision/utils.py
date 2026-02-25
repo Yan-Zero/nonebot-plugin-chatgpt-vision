@@ -384,11 +384,11 @@ def fix_xml(xml: str, convert_face_to_image=True) -> str:
                         self.reply_seen_in_p = True
                     else:
                         self._emit_fragment_into_current_scope(frag)
-                    self.skip_stack.append(tag)
+                    self.skip_stack.append("")
                     return
 
                 self._emit_fragment_into_current_scope(frag)
-                self.skip_stack.append(tag)
+                self.skip_stack.append("")
                 return
 
             if tag == "code":

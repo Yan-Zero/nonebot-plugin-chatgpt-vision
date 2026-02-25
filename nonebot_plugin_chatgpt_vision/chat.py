@@ -48,7 +48,11 @@ async def chat(
             )
     try:
         rsp = await AsyncOpenAI(**OPENAI_CONFIG[use_model]).chat.completions.create(
-            messages=message, model=use_model, temperature=temperature, **kwargs
+            messages=message,
+            model=use_model,
+            temperature=temperature,
+            timeout=60 * 60,
+            **kwargs,
         )
 
         if not rsp:

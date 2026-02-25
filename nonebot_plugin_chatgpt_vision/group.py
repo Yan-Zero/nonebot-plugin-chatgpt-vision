@@ -56,26 +56,26 @@ class GroupRecord:
     """显示工具调用的结果"""
 
     lock: asyncio.Lock
-    include_tool_id: bool = False
+    include_tool_id: bool = True
     mcp_loaded: bool = False
     tool_manager: ToolManager
 
-    first_msg: Optional[RecordSeg] = None
+    first_msg: RecordSeg | None = None
     """第一条消息，也就是不会被删除的消息"""
     model_weights: dict[str, float] = {}
     """模型权重，用于随机选择模型"""
-    next_model: Optional[str] = None
+    next_model: str | None = None
     """下一个要使用的模型，空则随机选择（或使用默认模型）"""
 
     def __init__(
         self,
         bot_name: str = "苦咖啡",
         bot_id: str = "100000",
-        system_prompt: Optional[str] = None,
-        model: Optional[str] = None,
-        default_tools: Optional[list[str]] = None,
-        mcp_config: Optional[str | dict] = None,
-        include_tool_id: bool = False,
+        system_prompt: str | None = None,
+        model: str | None = None,
+        default_tools: list[str] | None = None,
+        mcp_config: str | dict | None = None,
+        include_tool_id: bool = True,
         **kwargs,
     ):
         self.todo_ops = []
@@ -377,7 +377,7 @@ class GroupRecord:
                     message=messages,
                     model=model,
                     temperature=0.8,
-                    max_tokens=4096 * 2,
+                    max_tokens=4096 * 16,
                     tools=tools if tools else None,
                     tool_choice="auto" if tools else None,
                 )
@@ -395,8 +395,11 @@ class GroupRecord:
                     )
                     if content and content != "<p></p>":
                         should_record = True
-                    record_msg.append(("content", content))
                     yield content
+                    thinking = getattr(choice.message, "reasoning_content", "")
+                    if thinking:
+                        thinking = "<think>" + thinking + "</think>"
+                    record_msg.append(("content", thinking + content))
 
                 # 检查是否有工具调用
                 if getattr(choice.message, "tool_calls", None):
@@ -413,6 +416,10 @@ class GroupRecord:
                         }
                         for tc in tool_calls
                     ]
+                    if not self.include_tool_id:
+                        for tc in tool_calls:
+                            if "id" in tc:
+                                del tc["id"]
                     record_msg.append(
                         (
                             "tool_calls",
